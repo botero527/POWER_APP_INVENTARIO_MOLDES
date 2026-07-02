@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Gestión de Inventarios{% endblock %} — AGP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      {% block back_button %}{% endblock %}
+    </div>
+    <div class="topbar-center">
+      <span class="topbar-title">Gestión de Inventarios Ingeniería</span>
+    </div>
+    <div class="topbar-right">
+      <div class="agp-logo">AGP</div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <span>Powered By IT COL</span>
+  </footer>
+
+  <div id="toast-container"></div>
+
+  <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

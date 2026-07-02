@@ -1,0 +1,687 @@
+{% extends "base.html" %}
+{% block title %}Mantenimiento{% endblock %}
+
+{% block back_button %}
+<a href="/" class="btn-back" id="btn-back">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+    <polyline points="13,8 9,12 13,16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</a>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/mantenimiento.css') }}" />
+{% endblock %}
+
+{% block content %}
+
+<!-- ── LOGIN SCREEN ───────────────────────────────────── -->
+<div id="login-screen" class="login-screen">
+  <div class="login-card">
+    <div class="login-avatar">
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="32" cy="22" r="12" stroke="currentColor" stroke-width="3"/>
+        <path d="M8 56c0-13.255 10.745-24 24-24s24 10.745 24 24" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <h2 class="login-title">Gestión de Mantenimiento</h2>
+    <p class="login-subtitle">Ingresa tus credenciales para continuar</p>
+
+    <div class="form-group">
+      <label>Usuario</label>
+      <div class="select-wrapper">
+        <select id="login-user">
+          <option value="">Seleccione el usuario...</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Contraseña</label>
+      <div class="input-icon-wrap">
+        <input type="password" id="login-password" placeholder="••••••••" autocomplete="off" />
+        <button class="btn-toggle-pw" id="btn-toggle-pw" tabindex="-1" type="button">
+          <svg id="pw-eye" width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/>
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <p class="error-msg hidden" id="login-error">Usuario o contraseña incorrectos.</p>
+
+    <button class="btn btn-primary btn-block btn-lg" id="btn-login">Ingresar</button>
+  </div>
+</div>
+
+<!-- ── APP SCREEN ─────────────────────────────────────── -->
+<div id="app-screen" class="hidden">
+
+  <div class="mant-header">
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-tab="edit-jpg">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><polyline points="21,15 16,10 5,21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Gestión de Imágenes
+      </button>
+      <button class="tab" data-tab="edit-users">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/><path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" stroke-width="2"/><path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2"/></svg>
+        Usuarios
+      </button>
+      <button class="tab" data-tab="edit-input">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/><line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/><line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/></svg>
+        Configuración
+      </button>
+    </div>
+    <div class="mant-user-info">
+      <button class="btn-robot" id="btn-robot" title="Registro de Mantenimientos">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="8" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 8V6a4 4 0 0 1 8 0v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="14" r="1.5" fill="currentColor"/><circle cx="15" cy="14" r="1.5" fill="currentColor"/><path d="M9 18h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Mantenimientos
+      </button>
+      <span id="mant-username-label"></span>
+      <span class="role-badge" id="mant-role-badge"></span>
+      <button class="btn btn-outline btn-sm" id="btn-logout">Salir</button>
+    </div>
+  </div>
+
+  <!-- TAB: EDIT JPG -->
+  <div class="tab-content active" id="tab-edit-jpg">
+    <div class="tab-toolbar">
+      <div class="search-box">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input type="text" id="img-search" placeholder="Buscar por nombre, tipo, código..." />
+      </div>
+      <button class="btn btn-primary" id="btn-img-add">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+        Agregar Imagen
+      </button>
+    </div>
+
+    <div class="img-grid" id="img-grid">
+      <div class="grid-loading">
+        <span class="spinner"></span> Cargando imágenes...
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: EDIT USERS -->
+  <div class="tab-content" id="tab-edit-users">
+
+    <!-- Stats cards -->
+    <div class="user-stats" id="user-stats"></div>
+
+    <!-- Toolbar -->
+    <div class="tab-toolbar" style="margin-top:16px">
+      <div class="filters-row">
+        <div class="search-box">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <input type="text" id="user-search" placeholder="Buscar usuario..." />
+        </div>
+        <div class="role-filter-pills" id="role-pills">
+          <button class="pill active" data-role="">Todos</button>
+          <button class="pill" data-role="Admin">Admin</button>
+          <button class="pill" data-role="Hornero">Hornero</button>
+          <button class="pill" data-role="Matricero">Matricero</button>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btn-user-add">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/><line x1="19" y1="8" x2="19" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="22" y1="11" x2="16" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Nuevo Usuario
+      </button>
+    </div>
+
+    <!-- Table -->
+    <div class="table-section" style="margin-top:0">
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Rol</th>
+              <th>Fecha Creación</th>
+              <th>Fecha Modificación</th>
+              <th style="width:80px"></th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody">
+            <tr class="row-loading"><td colspan="5"><span class="spinner"></span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-footer">
+        <span id="users-count-label">— usuarios</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: EDIT INPUT -->
+  <div class="tab-content" id="tab-edit-input">
+    <div class="coming-soon">
+      <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.5"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="1.5"/></svg>
+      <p>Próximamente — cuéntame qué va aquí</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── MANTTO SCREEN (Robot) ──────────────────────────── -->
+<div id="mantto-screen" class="hidden">
+
+  <!-- Header mantto -->
+  <div class="mantto-header">
+    <button class="btn btn-outline btn-sm" id="btn-back-mantto">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="15,18 9,12 15,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Volver
+    </button>
+    <h2 class="mantto-title">Registro de Mantenimientos</h2>
+    <button class="btn btn-primary btn-sm" id="btn-mantto-add">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+      Nuevo
+    </button>
+  </div>
+
+  <!-- LISTA DE MANTENIMIENTOS -->
+  <div id="mantto-list-view">
+    <!-- Filtros -->
+    <div class="mantto-toolbar">
+      <div class="search-box">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input type="text" id="mantto-search" placeholder="Buscar por código, creado por..." />
+      </div>
+      <div class="role-filter-pills" id="mantto-estatus-pills">
+        <button class="pill active" data-estatus="">Todos</button>
+        <button class="pill" data-estatus="Finalizado">Finalizado</button>
+        <button class="pill" data-estatus="Pendiente">Pendiente</button>
+        <button class="pill" data-estatus="Cancelado">Cancelado</button>
+      </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="table-section">
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Creado por</th>
+              <th>Tipo</th>
+              <th>Código</th>
+              <th>Versión</th>
+              <th>Pieza</th>
+              <th>Rep.</th>
+              <th>Descripción</th>
+              <th>Estado</th>
+              <th style="width:60px"></th>
+            </tr>
+          </thead>
+          <tbody id="mantto-tbody">
+            <tr class="row-loading"><td colspan="10"><span class="spinner"></span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-footer">
+        <span id="mantto-count-label">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- DETALLE DE MANTENIMIENTO -->
+  <div id="mantto-detail-view" class="hidden">
+    <button class="btn btn-outline btn-sm" id="btn-back-detail" style="margin-bottom:20px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="15,18 9,12 15,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Volver a la lista
+    </button>
+
+    <div id="mantto-detail-content">
+      <div class="grid-loading"><span class="spinner"></span> Cargando...</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── MODAL BUSCAR HERRAMENTAL ───────────────────────── -->
+<div class="modal-overlay hidden" id="modal-buscar-her">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3>Agregar Mantenimiento</h3>
+      <button class="modal-close" id="btn-close-buscar">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
+        Filtre y seleccione el herramental al que desea hacer mantenimiento.
+      </p>
+      <div class="form-grid" style="grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+        <div class="form-group">
+          <label>Tipo</label>
+          <div class="select-wrapper">
+            <select id="buscar-tipo">
+              <option value="">Todos</option>
+              <option value="M">M</option>
+              <option value="G">G</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Código</label>
+          <input type="text" id="buscar-cod" placeholder="Ej: 1244" />
+        </div>
+        <div class="form-group">
+          <label>Versión</label>
+          <input type="text" id="buscar-version" placeholder="Ej: 000" />
+        </div>
+        <div class="form-group">
+          <label>Pieza</label>
+          <input type="text" id="buscar-pieza" placeholder="Ej: 000" />
+        </div>
+      </div>
+      <div class="table-wrapper" style="max-height:320px;overflow-y:auto">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Tipo</th><th>Código</th><th>Versión</th><th>Pieza</th>
+              <th>Vehículo</th><th>Rep.</th><th>Descripción</th><th style="width:50px"></th>
+            </tr>
+          </thead>
+          <tbody id="buscar-tbody">
+            <tr class="row-loading"><td colspan="8">Escriba para buscar...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL CONFIRMAR MANTTO ─────────────────────────── -->
+<div class="modal-overlay hidden" id="modal-confirmar-mantto">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <h3>Confirmar Mantenimiento</h3>
+      <button class="modal-close" id="btn-close-confirmar">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="confirm-her-card" id="confirm-her-data"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btn-cancel-confirmar">Cancelar</button>
+      <button class="btn btn-primary" id="btn-aceptar-mantto">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Aceptar — Crear Mantenimiento
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── FORMULARIO MANTENIMIENTO (4 PASOS) ─────────────── -->
+<div class="modal-overlay hidden" id="modal-form-mantto">
+  <div class="modal modal-xl">
+    <div class="modal-header">
+      <div style="flex:1">
+        <h3 id="form-mantto-title">Mantenimiento de Herramental</h3>
+        <!-- Steps -->
+        <div class="steps-bar" id="steps-bar">
+          <div class="step active" data-step="1">
+            <div class="step-circle">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <span>Ingreso Her.</span>
+          </div>
+          <div class="step-line"></div>
+          <div class="step" data-step="2">
+            <div class="step-circle">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14" stroke="currentColor" stroke-width="2"/></svg>
+            </div>
+            <span>Mantto Her.</span>
+          </div>
+          <div class="step-line"></div>
+          <div class="step" data-step="3">
+            <div class="step-circle">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/></svg>
+            </div>
+            <span>Datos Adic.</span>
+          </div>
+          <div class="step-line"></div>
+          <div class="step" data-step="4">
+            <div class="step-circle">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <span>Entrega Her.</span>
+          </div>
+        </div>
+      </div>
+      <button class="modal-close" id="btn-close-form-mantto">&times;</button>
+    </div>
+
+    <div class="modal-body" style="padding:0">
+
+      <!-- PASO 1: INGRESO HER -->
+      <div class="step-content active" id="step-content-1">
+        <div class="step1-layout">
+          <!-- Panel izquierdo: inputs -->
+          <div class="step1-panel">
+            <div class="step1-subtabs">
+              <button class="step1-tab active" data-subtab="ajuste">Punto Ajuste</button>
+              <button class="step1-tab" data-subtab="espesor">Espesor Pista</button>
+            </div>
+
+            <!-- Sub-tab: Punto Ajuste -->
+            <div class="step1-subtab-content active" id="subtab-ajuste">
+              <div class="subtab-header">
+                <span class="subtab-title">Puntos de Ajuste</span>
+                <span class="subtab-hint">Valor de ajuste por punto</span>
+              </div>
+              <div id="ajuste-inputs" class="measure-list">
+                <div class="grid-loading"><span class="spinner"></span></div>
+              </div>
+            </div>
+
+            <!-- Sub-tab: Espesor Pista -->
+            <div class="step1-subtab-content" id="subtab-espesor">
+              <div class="subtab-header">
+                <span class="subtab-title">Espesor de Pista</span>
+                <span class="subtab-hint">Solo puntos definidos en imagen</span>
+              </div>
+              <div id="espesor-inputs" class="measure-list">
+                <div class="grid-loading"><span class="spinner"></span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Panel derecho: imagen -->
+          <div class="step1-img-panel">
+            <div class="step1-img-box" id="step1-img-box">
+              <span class="no-img">Sin imagen registrada</span>
+            </div>
+            <div class="step1-img-info" id="step1-img-info"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PASO 2: MANTTO HER -->
+      <div class="step-content" id="step-content-2">
+        <div class="step-form-wrap">
+          <div class="step-form-card">
+            <h3 class="step-form-title">Finalización de Mantenimiento</h3>
+            <p class="step-form-sub">Complete los datos del mantenimiento realizado.</p>
+
+            <div class="form-group" style="margin-top:20px">
+              <label>Tipo de mantenimiento <span class="required">*</span></label>
+              <div class="select-wrapper">
+                <select id="mant-tipo-mant">
+                  <option value="">-- Seleccione --</option>
+                  <option value="Mantenimiento Tipo 1">Mantenimiento Tipo 1</option>
+                  <option value="Mantenimiento Tipo 2">Mantenimiento Tipo 2</option>
+                  <option value="Mantenimiento Tipo 3">Mantenimiento Tipo 3</option>
+                  <option value="Mantenimiento Preventivo">Mantenimiento Preventivo</option>
+                  <option value="Mantenimiento Correctivo">Mantenimiento Correctivo</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-top:16px">
+              <label>Estado de los postes <span class="required">*</span></label>
+              <div class="select-wrapper">
+                <select id="mant-estado-postes">
+                  <option value="">-- Seleccione --</option>
+                  <option value="Bueno">Bueno</option>
+                  <option value="Regular">Regular</option>
+                  <option value="Malo">Malo</option>
+                  <option value="Requiere reemplazo">Requiere reemplazo</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-top:16px">
+              <label>Observaciones <small class="text-muted">(solo si aplica)</small></label>
+              <textarea id="mant-observaciones" rows="4"
+                placeholder="Ingrese observaciones relevantes del mantenimiento..."
+                style="width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font);font-size:13px;resize:vertical;outline:none;color:var(--text);background:var(--surface)"></textarea>
+            </div>
+
+            <div class="step2-save-status" id="step2-save-status"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PASO 3: RESUMEN -->
+      <div class="step-content" id="step-content-3">
+        <div class="step3-layout">
+          <!-- Panel izquierdo: datos básicos + entrega -->
+          <div class="step3-panel">
+            <div class="step3-section">
+              <p class="step3-section-title">Datos básicos</p>
+              <div id="step3-basic-data"></div>
+            </div>
+            <div class="step3-section">
+              <p class="step3-section-title">Quien entrega</p>
+              <div class="step3-person" id="step3-entrega">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <span id="step3-entrega-name">—</span>
+              </div>
+            </div>
+            <div class="step3-section">
+              <p class="step3-section-title">Quien recibe</p>
+              <div id="step3-recibe-wrap">
+                <button class="step3-recibe-btn" id="btn-set-recibe">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="8" x2="18" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="15" y1="11" x2="21" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  Ingresar quien recibe
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Panel derecho: resumen completo -->
+          <div class="step3-detail-panel" id="step3-detail-panel">
+            <div class="grid-loading"><span class="spinner"></span> Cargando resumen...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PASO 4: ENTREGA / CONFIRMAR -->
+      <div class="step-content" id="step-content-4">
+        <div class="step-form-wrap">
+          <div class="step-form-card" style="text-align:center;max-width:500px">
+            <div style="margin-bottom:20px">
+              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" style="color:var(--primary)">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                <polyline points="9 12 11 14 15 10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <h3 class="step-form-title">¿Finalizar el mantenimiento?</h3>
+            <p class="step-form-sub" style="margin-top:8px">
+              Esta acción marcará el mantenimiento como <b>Finalizado</b> y registrará la fecha de liberación.
+              No podrá editarse después.
+            </p>
+            <div id="step4-resumen" style="margin-top:20px;text-align:left"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-outline hidden" id="btn-step-prev">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="15,18 9,12 15,6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Anterior
+      </button>
+      <span style="flex:1;font-size:12px;color:var(--text-muted)" id="step-auto-save-label"></span>
+      <button class="btn btn-primary" id="btn-step-next">
+        Siguiente
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="9,18 15,12 9,6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL IMAGEN ───────────────────────────────────── -->
+<div class="modal-overlay hidden" id="modal-img">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3 id="modal-img-title">Agregar Imagen</h3>
+      <button class="modal-close" id="btn-close-img">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="img-editor-grid">
+        <!-- Previa -->
+        <div class="img-preview-col">
+          <p class="col-label">Imagen actual</p>
+          <div class="img-preview-box" id="img-preview-old">
+            <span class="no-img">Sin imagen</span>
+          </div>
+        </div>
+        <div class="img-preview-col">
+          <p class="col-label">Nueva imagen</p>
+          <div class="img-preview-box img-drop-zone" id="img-drop-zone">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="1.5"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="1.5"/></svg>
+            <p>Arrastra aquí o <label class="link" for="img-file-input">selecciona un archivo</label></p>
+            <input type="file" id="img-file-input" accept="image/*" class="hidden" />
+          </div>
+          <img id="img-preview-new" class="hidden img-preview-thumb" alt="Vista previa" />
+        </div>
+      </div>
+
+      <div class="form-grid mt-16">
+        <div class="form-group">
+          <label>Tipo <span class="required">*</span></label>
+          <div class="select-wrapper">
+            <select id="img-tipo">
+              <option value="">-- Tipo --</option>
+              <option value="M">M</option>
+              <option value="G">G</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Código Herramental <small class="text-muted">(vacío = cualquiera)</small></label>
+          <input type="text" id="img-cod" placeholder="XXXX" />
+        </div>
+        <div class="form-group">
+          <label>Versión <small class="text-muted">(vacío = cualquiera)</small></label>
+          <input type="text" id="img-version" placeholder="XXX" />
+        </div>
+        <div class="form-group">
+          <label>Pieza <small class="text-muted">(vacío = cualquiera)</small></label>
+          <input type="text" id="img-pieza" placeholder="XXX" />
+        </div>
+        <div class="form-group">
+          <label>Cantidad de Puntos <span class="required">*</span></label>
+          <input type="number" id="img-cantidad" min="1" placeholder="Ej: 26" />
+        </div>
+        <div class="form-group">
+          <label>Puntos Esp. Pista <span class="required">*</span></label>
+          <input type="text" id="img-puntos" placeholder="Ej: 1,7,13,21" />
+        </div>
+      </div>
+
+      <div class="nombre-preview">
+        <span class="nombre-label">Nombre generado:</span>
+        <code id="nombre-generado">--</code>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btn-cancel-img">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-img">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="2"/><polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2"/><polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2"/></svg>
+        Guardar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL USUARIO ──────────────────────────────────── -->
+<div class="modal-overlay hidden" id="modal-user">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-user-title">Nuevo Usuario</h3>
+      <button class="modal-close" id="btn-close-user">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="user-edit-id" />
+      <div class="form-group">
+        <label>Nombre completo <span class="required">*</span></label>
+        <input type="text" id="user-nombre" placeholder="Ej: Ruben Dario" autocomplete="off" />
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label>Rol <span class="required">*</span></label>
+        <div class="select-wrapper">
+          <select id="user-rol">
+            <option value="">-- Seleccionar --</option>
+            <option value="Admin">Admin</option>
+            <option value="Hornero">Hornero</option>
+            <option value="Matricero">Matricero</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label id="user-pw-label">Contraseña <span class="required">*</span></label>
+        <small class="text-muted" id="user-pw-hint" style="display:block;margin-bottom:4px">Puede ser la cédula del usuario</small>
+        <div class="input-icon-wrap">
+          <input type="password" id="user-password" placeholder="••••••••" autocomplete="new-password" />
+          <button class="btn-toggle-pw" id="btn-toggle-user-pw" type="button" tabindex="-1">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:12px" id="user-confirm-group">
+        <label>Confirmar Contraseña <span class="required">*</span></label>
+        <div class="input-icon-wrap">
+          <input type="password" id="user-confirm" placeholder="••••••••" autocomplete="new-password" />
+        </div>
+      </div>
+      <p class="error-msg hidden" id="user-error"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btn-cancel-user">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-user">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="2"/><polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2"/><polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2"/></svg>
+        Guardar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL QUIEN RECIBE ──────────────────────────────── -->
+<div class="modal-overlay hidden" id="modal-recibe">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h3>Ingresar quien recibe</h3>
+      <button class="modal-close" id="btn-close-recibe">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
+        El usuario debe autenticarse para confirmar la recepción del herramental.
+      </p>
+      <div class="form-group">
+        <label>Usuario</label>
+        <div class="select-wrapper">
+          <select id="recibe-user-select">
+            <option value="">Seleccione el usuario...</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label>Contraseña</label>
+        <div class="input-icon-wrap">
+          <input type="password" id="recibe-password" placeholder="••••••••" autocomplete="off" />
+          <button class="btn-toggle-pw" id="btn-toggle-recibe-pw" type="button" tabindex="-1">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+        </div>
+      </div>
+      <p class="error-msg hidden" id="recibe-error"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btn-cancel-recibe">Cancelar</button>
+      <button class="btn btn-primary" id="btn-confirm-recibe">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Confirmar
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/mantenimiento.js') }}"></script>
+{% endblock %}
