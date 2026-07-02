@@ -3,6 +3,14 @@ let editImgId  = null;
 let editUserId = null;
 let allUsers   = [];
 
+/* ── IMAGE URL RESOLVER ────────────────────────────────── */
+function resolveImgSrc(idStorage) {
+  if (!idStorage) return null;
+  if (idStorage.startsWith('JTJ')) return null;          // URL antigua SharePoint base64
+  if (idStorage.startsWith('https://')) return idStorage; // Azure Blob URL directa
+  return `/static/${idStorage}`;                          // ruta local legada
+}
+
 /* ── INIT ──────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
   await checkSession();
@@ -85,6 +93,7 @@ function showApp(me) {
   bindUserModal();
   bindRobot();
   bindBuscarHer();
+  bindRecibeModal();
 
   // Load first tab
   loadImgGrid();
@@ -127,9 +136,7 @@ function renderImgGrid(rows) {
 
   grid.innerHTML = rows.map(r => {
     const p = r._parsed || {};
-    const imgSrc = r.IdStorage && !r.IdStorage.startsWith('JTJ')
-      ? `/static/${r.IdStorage}`
-      : null;
+    const imgSrc = resolveImgSrc(r.IdStorage);
 
     const thumbHtml = imgSrc
       ? `<img src="${imgSrc}" alt="${r.Nombre_Imagen}" />`
@@ -741,9 +748,63 @@ async function abrirFormMantto() {
 }
 
 function closeFormMantto() {
+  // Si hay un mantto activo pendiente, avisar que quedó guardado
+  if (manttoActivoId) {
+    toast('Mantenimiento guardado — puedes continuarlo desde la lista', 'info');
+  }
   document.getElementById('modal-form-mantto').classList.add('hidden');
   manttoActivoId = null; imgConfig = null; herSeleccionado = null;
+  recibeUsername = null; window._step2Data = null;
   loadManttos();
+}
+
+async function resumeMantto(id) {
+  try {
+    const m = await api(`/api/mantenimiento/manttos/${id}`);
+    manttoActivoId = id;
+    recibeUsername = m.Recibe || null;
+
+    // Reconstruir herSeleccionado con los datos del registro
+    herSeleccionado = {
+      Tipo:        m.Tipo,
+      CodMolde:    m.CodHer,
+      Version:     m.Version,
+      Pieza:       m.Pieza,
+      _nextRep:    m.Repeticion,
+      Adicionales: m.Adicionales || '',
+    };
+
+    // Determinar en qué paso retomar
+    let startStep = 1;
+    if (m.TipoMant && m.EstadoPostes) startStep = 3;
+    else if (m.TipoMant || m.EstadoPostes) startStep = 2;
+
+    currentStep = startStep;
+    renderStepBar();
+    showStepContent(startStep);
+
+    document.getElementById('form-mantto-title').textContent =
+      `${m.Tipo}${m.CodHer} — Rep. ${m.Repeticion} (Continuando)`;
+    document.getElementById('modal-form-mantto').classList.remove('hidden');
+
+    // Cargar datos del paso correspondiente
+    if (startStep === 1) {
+      await loadStep1();
+    } else if (startStep === 2) {
+      window._step2Data = m;
+      loadStep2();
+      // También precargar imagen para paso 1 si vuelve
+      api(`/api/mantenimiento/imagenes/buscar?tipo=${m.Tipo}&cod=${m.CodHer}&version=${m.Version}&pieza=${m.Pieza}`)
+        .then(img => { imgConfig = img; }).catch(() => {});
+    } else if (startStep === 3) {
+      window._step2Data = m;
+      await loadStep3();
+    }
+
+    toast('Continuando mantenimiento guardado', 'success');
+  } catch (e) {
+    toast('Error al cargar el mantenimiento: ' + e.message, 'error');
+  }
 }
 
 function renderStepBar() {
@@ -797,6 +858,251 @@ function prevStep() {
   }
 }
 
+/* ── PASO 2: MANTTO HER ──────────────────────────────────── */
+
+function loadStep2() {
+  // Restaurar valores guardados si los hay
+  if (window._step2Data) {
+    document.getElementById('mant-tipo-mant').value     = window._step2Data.TipoMant || '';
+    document.getElementById('mant-estado-postes').value = window._step2Data.EstadoPostes || '';
+    document.getElementById('mant-observaciones').value = window._step2Data.Observaciones || '';
+  }
+
+  // Auto-save al cambiar
+  const autoSave = () => {
+    const label = document.getElementById('step2-save-status');
+    clearTimeout(window._step2Deb);
+    window._step2Deb = setTimeout(async () => {
+      try {
+        await api(`/api/mantenimiento/manttos/${manttoActivoId}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            TipoMant:      document.getElementById('mant-tipo-mant').value,
+            EstadoPostes:  document.getElementById('mant-estado-postes').value,
+            Observaciones: document.getElementById('mant-observaciones').value,
+          }),
+        });
+        if (label) { label.textContent = '✓ Guardado automáticamente'; setTimeout(() => label.textContent = '', 2000); }
+      } catch { if (label) label.textContent = 'Error al guardar'; }
+    }, 600);
+  };
+
+  ['mant-tipo-mant','mant-estado-postes','mant-observaciones'].forEach(id => {
+    const el = document.getElementById(id);
+    el.removeEventListener('input', autoSave);
+    el.removeEventListener('change', autoSave);
+    el.addEventListener('input', autoSave);
+    el.addEventListener('change', autoSave);
+  });
+}
+
+async function saveStep2() {
+  const tipo  = document.getElementById('mant-tipo-mant').value;
+  const estado = document.getElementById('mant-estado-postes').value;
+  if (!tipo || !estado) {
+    toast('Selecciona el tipo de mantenimiento y el estado de los postes', 'error');
+    return false;
+  }
+  try {
+    await api(`/api/mantenimiento/manttos/${manttoActivoId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        TipoMant:      tipo,
+        EstadoPostes:  estado,
+        Observaciones: document.getElementById('mant-observaciones').value,
+      }),
+    });
+    return true;
+  } catch (e) {
+    toast(e.message, 'error');
+    return false;
+  }
+}
+
+/* ── PASO 3: RESUMEN ─────────────────────────────────────── */
+
+let recibeUsername = null;
+
+async function loadStep3() {
+  const her = herSeleccionado;
+
+  // Datos básicos
+  document.getElementById('step3-basic-data').innerHTML = `
+    <div style="font-size:13px;line-height:2;color:var(--text)">
+      <div><b>Tipo:</b> ${her.Tipo}</div>
+      <div><b>Código:</b> ${her.CodMolde}</div>
+      <div><b>Versión:</b> ${her.Version}</div>
+      <div><b>Pieza:</b> ${her.Pieza}</div>
+      <div><b>Repetición:</b> ${her._nextRep}</div>
+    </div>`;
+
+  // Quien entrega = usuario de sesión (se guarda ahora)
+  const entregaName = document.getElementById('mant-username-label')?.textContent || '';
+  document.getElementById('step3-entrega-name').textContent = entregaName;
+  if (entregaName) {
+    await api(`/api/mantenimiento/manttos/${manttoActivoId}`, {
+      method: 'PUT', body: JSON.stringify({ Entrega: entregaName }),
+    }).catch(() => {});
+  }
+
+  // Cargar detalle completo en panel derecho
+  const panel = document.getElementById('step3-detail-panel');
+  try {
+    const m = await api(`/api/mantenimiento/manttos/${manttoActivoId}`);
+    window._step2Data = m; // guardar para si vuelve al paso 2
+    panel.innerHTML = buildResumenHTML(m);
+  } catch (e) {
+    panel.innerHTML = `<p style="color:var(--text-muted)">Error cargando resumen: ${e.message}</p>`;
+  }
+}
+
+function buildResumenHTML(m) {
+  const img = m._img;
+  const imgSrc = img ? resolveImgSrc(img.IdStorage) : null;
+
+  const claseLabel = {
+    'MedidaTolerancia_Mantenimiento': 'Mediciones de Tolerancia',
+    'EspesorPista_Mantenimiento':     'Espesor de Pista',
+  };
+  let medsSections = '';
+  for (const [clase, items] of Object.entries(m.details_by_clase || {})) {
+    const label   = claseLabel[clase] || clase.replace(/_/g, ' ');
+    const sorted  = [...items].sort((a, b) => a.IdMed - b.IdMed);
+    const headers = sorted.map(d => `<th>${d.IdMed}</th>`).join('');
+    const vals    = sorted.map(d => `<td>${d.Value ?? '--'}</td>`).join('');
+    medsSections += `
+      <div class="meds-section" style="margin-bottom:16px">
+        <div class="meds-section-title">${label}</div>
+        <div class="meds-table-wrap">
+          <table class="meds-table">
+            <thead><tr><th>Punto</th>${headers}</tr></thead>
+            <tbody><tr><td>Valor</td>${vals}</tr></tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+      <h3 style="font-size:18px;font-weight:800;flex:1">Herramental a Liberar</h3>
+      <span class="estatus-badge estatus-${m.Estatus}">${m.Estatus}</span>
+    </div>
+    ${imgSrc ? `<div style="text-align:center;margin-bottom:16px"><img src="${imgSrc}" style="max-height:200px;object-fit:contain;border-radius:8px;border:1px solid var(--border)" /></div>` : ''}
+    ${medsSections || '<p style="color:var(--text-muted);font-size:13px">Sin mediciones registradas.</p>'}
+    <div class="detail-card" style="margin-top:16px">
+      <div class="detail-card-title">Detalle del Mantenimiento</div>
+      <div class="detail-row"><span class="detail-label">Tipo mantenimiento</span><span class="detail-value">${m.TipoMant || '--'}</span></div>
+      <div class="detail-row"><span class="detail-label">Estado de postes</span><span class="detail-value">${m.EstadoPostes || '--'}</span></div>
+      <div class="detail-row"><span class="detail-label">Observaciones</span><span class="detail-value">${m.Observaciones || 'No registra'}</span></div>
+    </div>`;
+}
+
+function bindRecibeModal() {
+  document.getElementById('btn-set-recibe').addEventListener('click', openRecibeModal);
+  document.getElementById('btn-close-recibe').addEventListener('click', closeRecibeModal);
+  document.getElementById('btn-cancel-recibe').addEventListener('click', closeRecibeModal);
+  document.getElementById('btn-confirm-recibe').addEventListener('click', confirmarRecibe);
+  document.getElementById('btn-toggle-recibe-pw').addEventListener('click', () => {
+    const inp = document.getElementById('recibe-password');
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+  });
+}
+
+async function openRecibeModal() {
+  document.getElementById('recibe-error').classList.add('hidden');
+  document.getElementById('recibe-password').value = '';
+  const sel = document.getElementById('recibe-user-select');
+  if (sel.options.length <= 1) {
+    const users = await api('/api/mantenimiento/usuarios');
+    users.forEach(u => sel.insertAdjacentHTML('beforeend',
+      `<option value="${u.UserName}">${u.UserName}</option>`));
+  }
+  document.getElementById('modal-recibe').classList.remove('hidden');
+}
+
+function closeRecibeModal() {
+  document.getElementById('modal-recibe').classList.add('hidden');
+}
+
+async function confirmarRecibe() {
+  const username = document.getElementById('recibe-user-select').value;
+  const password = document.getElementById('recibe-password').value;
+  const errEl    = document.getElementById('recibe-error');
+  errEl.classList.add('hidden');
+
+  if (!username || !password) {
+    errEl.textContent = 'Selecciona un usuario e ingresa la contraseña.';
+    errEl.classList.remove('hidden'); return;
+  }
+
+  const btn = document.getElementById('btn-confirm-recibe');
+  btn.disabled = true;
+
+  try {
+    await api('/api/mantenimiento/verify-user', {
+      method: 'POST', body: JSON.stringify({ username, password }),
+    });
+    recibeUsername = username;
+
+    // Guardar en BD
+    await api(`/api/mantenimiento/manttos/${manttoActivoId}`, {
+      method: 'PUT', body: JSON.stringify({ Recibe: username }),
+    });
+
+    // Actualizar UI
+    document.getElementById('step3-recibe-wrap').innerHTML = `
+      <div class="step3-recibe-confirmed">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+          <polyline points="9 12 11 14 15 10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+        ${username}
+      </div>`;
+    closeRecibeModal();
+    toast(`${username} confirmado como receptor`, 'success');
+  } catch {
+    errEl.textContent = 'Usuario o contraseña incorrectos.';
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ── PASO 4: FINALIZAR ────────────────────────────────────── */
+
+function loadStep4() {
+  const her = herSeleccionado;
+  document.getElementById('step4-resumen').innerHTML = `
+    <div class="confirm-her-card">
+      <div class="confirm-row"><span class="confirm-label">Herramental</span><span class="confirm-value">${her.Tipo}${her.CodMolde} — V${her.Version} P${her.Pieza}</span></div>
+      <div class="confirm-row"><span class="confirm-label">Repetición</span><span class="confirm-value">#${her._nextRep}</span></div>
+      <div class="confirm-row"><span class="confirm-label">Entrega</span><span class="confirm-value">${document.getElementById('step3-entrega-name')?.textContent || '—'}</span></div>
+      <div class="confirm-row"><span class="confirm-label">Recibe</span><span class="confirm-value">${recibeUsername || '⚠️ Sin confirmar'}</span></div>
+    </div>`;
+}
+
+async function finalizarMantto() {
+  if (!recibeUsername) {
+    toast('Debes confirmar quien recibe antes de finalizar', 'error');
+    currentStep = 3; renderStepBar(); showStepContent(3);
+    return;
+  }
+  const btn = document.getElementById('btn-step-next');
+  btn.disabled = true;
+  try {
+    await api(`/api/mantenimiento/manttos/${manttoActivoId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ Estatus: 'Finalizado', FechaReleaseMant: new Date().toISOString() }),
+    });
+    closeFormMantto();
+    toast('¡Mantenimiento finalizado correctamente!', 'success');
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 /* ── PASO 1: INGRESO HER ─────────────────────────────────── */
 
 async function loadStep1() {
@@ -821,8 +1127,9 @@ async function loadStep1() {
 function renderStep1Image() {
   const box  = document.getElementById('step1-img-box');
   const info = document.getElementById('step1-img-info');
-  if (imgConfig && imgConfig.IdStorage && !imgConfig.IdStorage.startsWith('JTJ')) {
-    box.innerHTML = `<img src="/static/${imgConfig.IdStorage}" alt="Herramental" style="max-height:320px;object-fit:contain" />`;
+  const step1Src = resolveImgSrc(imgConfig?.IdStorage);
+  if (step1Src) {
+    box.innerHTML = `<img src="${step1Src}" alt="Herramental" style="max-height:320px;object-fit:contain" />`;
     info.textContent = imgConfig.Nombre_Imagen || '';
   } else {
     box.innerHTML = `<span class="no-img">Sin imagen registrada para este herramental</span>`;
@@ -1041,9 +1348,16 @@ function renderManttos() {
       <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.Adicionales || '--'}</td>
       <td><span class="estatus-badge estatus-${m.Estatus}">${m.Estatus}</span></td>
       <td>
-        <button class="btn-edit" title="Ver detalle" onclick="openManttoDetail(${m.IdManten})">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
-        </button>
+        <div style="display:flex;gap:4px">
+          ${m.Estatus === 'Pendiente' ? `
+          <button class="btn-edit" title="Continuar llenando" style="color:var(--primary)"
+            onclick="resumeMantto(${m.IdManten})">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>
+          </button>` : ''}
+          <button class="btn-edit" title="Ver detalle" onclick="openManttoDetail(${m.IdManten})">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+        </div>
       </td>
     </tr>
   `).join('');
@@ -1064,8 +1378,7 @@ async function openManttoDetail(id) {
 
 function renderManttoDetail(m) {
   const img = m._img;
-  const imgSrc = img && img.IdStorage && !img.IdStorage.startsWith('JTJ')
-    ? `/static/${img.IdStorage}` : null;
+  const imgSrc = img ? resolveImgSrc(img.IdStorage) : null;
 
   const claseLabel = {
     'MedidaTolerancia_Mantenimiento': 'Mediciones de Tolerancia',

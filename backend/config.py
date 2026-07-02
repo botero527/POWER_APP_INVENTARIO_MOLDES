@@ -3,6 +3,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+AZURE_STORAGE_CONNECTION_STRING = os.getenv('AZURE_STORAGE_CONNECTION_STRING', '')
+AZURE_STORAGE_CONTAINER         = os.getenv('AZURE_STORAGE_CONTAINER', 'inventario-moldes')
+
 DB_SERVER   = os.getenv('DB_SERVER')
 DB_NAME     = os.getenv('DB_NAME')
 DB_USER     = os.getenv('DB_USER')

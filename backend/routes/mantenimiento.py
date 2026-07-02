@@ -302,12 +302,8 @@ def delete_mantto(id_mant):
 
 
 def _save_file(file_obj):
-    """Guarda imagen en uploads/ y retorna la ruta relativa."""
+    """Sube imagen a Azure Blob Storage y retorna la URL pública."""
     if not file_obj or not allowed_file(file_obj.filename):
         return None
-    ext = file_obj.filename.rsplit('.', 1)[1].lower()
-    filename = f"{uuid.uuid4().hex}.{ext}"
-    upload_dir = os.path.join(current_app.static_folder, 'uploads')
-    os.makedirs(upload_dir, exist_ok=True)
-    file_obj.save(os.path.join(upload_dir, filename))
-    return f"uploads/{filename}"
+    from backend.blob import upload_image
+    return upload_image(file_obj, file_obj.filename)
