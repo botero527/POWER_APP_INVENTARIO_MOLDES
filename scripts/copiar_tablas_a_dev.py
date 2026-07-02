@@ -2,22 +2,26 @@
 Copia las tablas de produccion (agpc-productivity) a dev (AGP_Ingenieria).
 Ejecutar una sola vez: py scripts/copiar_tablas_a_dev.py
 """
+import os
 import pyodbc
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
+# Credenciales PROD: configurar en .env como PROD_DB_PASSWORD y PROD_DB_USER
 PROD = (
     'DRIVER={ODBC Driver 17 for SQL Server};'
     'SERVER=agpcol.database.windows.net;'
     'DATABASE=agpc-productivity;'
-    'UID=Consulta;'
-    '[PWD=REDACTED];'
+    f'UID={os.getenv("PROD_DB_USER", "Consulta")};'
+    f'PWD={os.environ["PROD_DB_PASSWORD"]};'
     'Encrypt=yes;TrustServerCertificate=no;'
 )
 DEV = (
     'DRIVER={ODBC Driver 17 for SQL Server};'
-    'SERVER=agpcolombia.database.windows.net;'
-    'DATABASE=AGP_Ingenieria;'
-    'UID=DevIngenieria;'
-    '[PWD=REDACTED];'
+    f'SERVER={os.environ["DB_SERVER"]};'
+    f'DATABASE={os.environ["DB_NAME"]};'
+    f'UID={os.environ["DB_USER"]};'
+    f'PWD={os.environ["DB_PASSWORD"]};'
     'Encrypt=yes;TrustServerCertificate=no;'
 )
 

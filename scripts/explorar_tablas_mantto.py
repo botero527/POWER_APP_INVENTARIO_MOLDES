@@ -1,12 +1,15 @@
 """Muestra columnas y una fila de muestra de ManttoHead y ManttoDetails."""
+import os
 import pyodbc
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 CONN = (
     'DRIVER={ODBC Driver 17 for SQL Server};'
-    'SERVER=agpcolombia.database.windows.net;'
-    'DATABASE=AGP_Ingenieria;'
-    'UID=DevIngenieria;'
-    '[PWD=REDACTED];'
+    f'SERVER={os.environ["DB_SERVER"]};'
+    f'DATABASE={os.environ["DB_NAME"]};'
+    f'UID={os.environ["DB_USER"]};'
+    f'PWD={os.environ["DB_PASSWORD"]};'
     'Encrypt=yes;TrustServerCertificate=no;'
 )
 

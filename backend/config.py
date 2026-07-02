@@ -18,6 +18,6 @@ CONNECTION_STRING = (
     f'SERVER={DB_SERVER};'
     f'DATABASE={DB_NAME};'
     f'UID={DB_USER};'
-    f'[PWD=REDACTED];'
+    f'PWD={DB_PASSWORD};'
     f'Encrypt=yes;TrustServerCertificate=no;'
 )

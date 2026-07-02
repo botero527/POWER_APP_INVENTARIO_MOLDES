@@ -2,22 +2,25 @@
 Copia las primeras 1000 filas de ManttoDetails de produccion a dev.
 Solo para pruebas de desarrollo.
 """
+import os
 import pyodbc
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 PROD = (
     'DRIVER={ODBC Driver 17 for SQL Server};'
     'SERVER=agpcol.database.windows.net;'
     'DATABASE=agpc-productivity;'
-    'UID=Consulta;'
-    '[PWD=REDACTED];'
+    f'UID={os.getenv("PROD_DB_USER", "Consulta")};'
+    f'PWD={os.environ["PROD_DB_PASSWORD"]};'
     'Encrypt=yes;TrustServerCertificate=no;'
 )
 DEV = (
     'DRIVER={ODBC Driver 17 for SQL Server};'
-    'SERVER=agpcolombia.database.windows.net;'
-    'DATABASE=AGP_Ingenieria;'
-    'UID=DevIngenieria;'
-    '[PWD=REDACTED];'
+    f'SERVER={os.environ["DB_SERVER"]};'
+    f'DATABASE={os.environ["DB_NAME"]};'
+    f'UID={os.environ["DB_USER"]};'
+    f'PWD={os.environ["DB_PASSWORD"]};'
     'Encrypt=yes;TrustServerCertificate=no;'
 )
 

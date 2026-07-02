@@ -4,16 +4,19 @@ Ejecutar: py scripts/1_ver_imagenes_sharepoint.py
 
 Esto te dice exactamente qué archivos buscar en SharePoint.
 """
+import os
 import pyodbc
 import base64
 from urllib.parse import unquote
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 CONN = (
     'DRIVER={ODBC Driver 17 for SQL Server};'
-    'SERVER=agpcolombia.database.windows.net;'
-    'DATABASE=AGP_Ingenieria;'
-    'UID=DevIngenieria;'
-    '[PWD=REDACTED];'
+    f'SERVER={os.environ["DB_SERVER"]};'
+    f'DATABASE={os.environ["DB_NAME"]};'
+    f'UID={os.environ["DB_USER"]};'
+    f'PWD={os.environ["DB_PASSWORD"]};'
     'Encrypt=yes;TrustServerCertificate=no;'
 )
 
