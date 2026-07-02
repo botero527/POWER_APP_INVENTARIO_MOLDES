@@ -1,6 +1,9 @@
 /* ── STATE ─────────────────────────────────────────────────── */
-let editTarget = null;   // null = agregar, number = editar
-let pendingAction = null; // 'edit' | 'add'
+let editTarget    = null;   // null = agregar, number = editar
+let pendingAction = null;   // 'edit' | 'add'
+let deleteTarget  = null;   // { id, label } del registro a eliminar
+let currentOffset = 0;      // paginación: offset actual
+let currentTotal  = 0;      // total de registros en DB
 
 /* ── INIT ──────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -31,62 +34,132 @@ async function loadOpciones() {
 }
 
 /* ── TABLA ─────────────────────────────────────────────────── */
+function getActiveFilters() {
+  return {
+    tipo:      document.getElementById('f-tipo').value,
+    cod_molde: document.getElementById('f-cod-molde').value.trim(),
+    version:   document.getElementById('f-version').value.trim(),
+    pieza:     document.getElementById('f-pieza').value.trim(),
+  };
+}
+
+function hasActiveFilters(f) {
+  return !!(f.tipo || f.cod_molde || f.version || f.pieza);
+}
+
 async function loadTable() {
-  const params = new URLSearchParams();
-  const tipo     = document.getElementById('f-tipo').value;
-  const codMolde = document.getElementById('f-cod-molde').value.trim();
-  const version  = document.getElementById('f-version').value.trim();
-  const pieza    = document.getElementById('f-pieza').value.trim();
-
-  if (tipo)     params.set('tipo', tipo);
-  if (codMolde) params.set('cod_molde', codMolde);
-  if (version)  params.set('version', version);
-  if (pieza)    params.set('pieza', pieza);
-
+  currentOffset = 0;
   const body = document.getElementById('tabla-body');
   body.innerHTML = `<tr class="row-loading"><td colspan="11"><span class="spinner"></span></td></tr>`;
+  updateLoadMoreBtn(false, true);
 
   try {
-    const res = await api(`/api/consultar/items?${params}`);
-    renderTable(res.data);
-    document.getElementById('total-label').textContent =
-      `${res.total.toLocaleString()} registro${res.total !== 1 ? 's' : ''}`;
+    const res = await fetchPage(0);
+    currentOffset = res.data.length;
+    currentTotal  = res.total;
+    renderTable(res.data, false);
+    updateFooter(res);
   } catch (e) {
     body.innerHTML = `<tr class="row-loading"><td colspan="11">Error al cargar datos</td></tr>`;
     toast(e.message, 'error');
   }
 }
 
-function renderTable(rows) {
+async function loadMore() {
+  updateLoadMoreBtn(true, false);
+  try {
+    const res = await fetchPage(currentOffset);
+    currentOffset += res.data.length;
+    renderTable(res.data, true);
+    updateFooter(res);
+  } catch (e) {
+    toast(e.message, 'error');
+    updateLoadMoreBtn(false, false);
+  }
+}
+
+async function fetchPage(offset) {
+  const f = getActiveFilters();
+  const params = new URLSearchParams({ offset });
+  if (f.tipo)      params.set('tipo', f.tipo);
+  if (f.cod_molde) params.set('cod_molde', f.cod_molde);
+  if (f.version)   params.set('version', f.version);
+  if (f.pieza)     params.set('pieza', f.pieza);
+  return api(`/api/consultar/items?${params}`);
+}
+
+function updateFooter(res) {
+  const showing = Math.min(currentOffset, res.total);
+  const label = hasActiveFilters(getActiveFilters())
+    ? `${res.total.toLocaleString()} registro${res.total !== 1 ? 's' : ''}`
+    : `Mostrando ${showing.toLocaleString()} de ${res.total.toLocaleString()}`;
+  document.getElementById('total-label').textContent = label;
+  updateLoadMoreBtn(false, res.has_more);
+}
+
+function updateLoadMoreBtn(loading, visible) {
+  const btn = document.getElementById('btn-load-more');
+  if (!btn) return;
+  if (!visible && !loading) {
+    btn.style.display = 'none';
+    return;
+  }
+  btn.style.display = '';
+  btn.disabled = loading;
+  btn.innerHTML = loading
+    ? '<span class="spinner"></span> Cargando...'
+    : 'Cargar más registros';
+}
+
+function rowHtml(r) {
+  return `
+    <tr>
+      <td>
+        <div style="display:flex;gap:2px">
+          <button class="btn-edit" title="Editar" onclick="handleEdit(${r.IdRegistro})">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button class="btn-edit" title="Eliminar" style="color:var(--danger)"
+            onclick="handleDelete(${r.IdRegistro},'${escapeHtml(r.Tipo)} ${escapeHtml(r.CodMolde)} V${escapeHtml(r.Version)} P${escapeHtml(r.Pieza)}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="2"/>
+              <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2"/>
+              <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </td>
+      <td><span class="badge badge-${escapeHtml(r.Tipo)}">${escapeHtml(r.Tipo)}</span></td>
+      <td>${escapeHtml(r.CodMolde ?? '')}</td>
+      <td>${escapeHtml(r.Version ?? '')}</td>
+      <td>${escapeHtml(r.Pieza ?? '')}</td>
+      <td>${escapeHtml(r.Repeticion ?? '')}</td>
+      <td>${escapeHtml(r.Puesto ?? '')}</td>
+      <td>${escapeHtml(r.Ubicacion ?? '')}</td>
+      <td>${escapeHtml(r.Vehiculo ?? '')}</td>
+      <td>${escapeHtml(r.Lote ?? '')}</td>
+      <td>${escapeHtml(r.Usos ?? '0')}</td>
+    </tr>
+  `;
+}
+
+function renderTable(rows, append) {
   const body = document.getElementById('tabla-body');
-  if (!rows.length) {
+  if (!append && !rows.length) {
     body.innerHTML = `<tr class="row-loading"><td colspan="11">Sin resultados</td></tr>`;
     return;
   }
-  body.innerHTML = rows.map(r => `
-    <tr>
-      <td>
-        <button class="btn-edit" title="Editar" onclick="handleEdit(${r.IdRegistro})">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-      </td>
-      <td><span class="badge badge-${r.Tipo}">${r.Tipo}</span></td>
-      <td>${r.CodMolde ?? ''}</td>
-      <td>${r.Version ?? ''}</td>
-      <td>${r.Pieza ?? ''}</td>
-      <td>${r.Repeticion ?? ''}</td>
-      <td>${r.Puesto ?? ''}</td>
-      <td>${r.Ubicacion ?? ''}</td>
-      <td>${r.Vehiculo ?? ''}</td>
-      <td>${r.Lote ?? ''}</td>
-      <td>${r.Usos ?? '0'}</td>
-    </tr>
-  `).join('');
+  const html = rows.map(rowHtml).join('');
+  if (append) {
+    body.insertAdjacentHTML('beforeend', html);
+  } else {
+    body.innerHTML = html;
+  }
 }
 
 /* ── FILTROS ───────────────────────────────────────────────── */
@@ -127,6 +200,11 @@ function bindButtons() {
   document.getElementById('btn-close-form').addEventListener('click', closeFormModal);
   document.getElementById('btn-cancel-form').addEventListener('click', closeFormModal);
   document.getElementById('btn-save-form').addEventListener('click', saveForm);
+
+  // Delete modal
+  document.getElementById('btn-close-delete').addEventListener('click', closeDeleteModal);
+  document.getElementById('btn-cancel-delete').addEventListener('click', closeDeleteModal);
+  document.getElementById('btn-confirm-delete').addEventListener('click', confirmDelete);
 }
 
 /* ── EDIT HANDLER ──────────────────────────────────────────── */
@@ -134,6 +212,61 @@ function handleEdit(id) {
   editTarget = id;
   pendingAction = 'edit';
   openPasswordModal();
+}
+
+/* ── DELETE HANDLERS ───────────────────────────────────────── */
+function handleDelete(id, label) {
+  deleteTarget = { id, label };
+  document.getElementById('delete-info').innerHTML =
+    `<strong>Registro a eliminar:</strong><br>${escapeHtml(label)}`;
+  document.getElementById('delete-motivo').value = '';
+  document.getElementById('delete-password').value = '';
+  document.getElementById('delete-error').classList.add('hidden');
+  document.getElementById('modal-delete').classList.remove('hidden');
+  setTimeout(() => document.getElementById('delete-motivo').focus(), 50);
+}
+
+function closeDeleteModal() {
+  document.getElementById('modal-delete').classList.add('hidden');
+  deleteTarget = null;
+}
+
+async function confirmDelete() {
+  if (!deleteTarget) return;
+
+  const motivo   = document.getElementById('delete-motivo').value.trim();
+  const password = document.getElementById('delete-password').value;
+  const errEl    = document.getElementById('delete-error');
+
+  if (!motivo || !password) {
+    errEl.textContent = 'Completa el motivo y la clave de administrador.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const btn = document.getElementById('btn-confirm-delete');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Eliminando...';
+
+  try {
+    await api(`/api/consultar/items/${deleteTarget.id}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ motivo, password }),
+    });
+    closeDeleteModal();
+    toast('Registro eliminado', 'success');
+    loadTable();
+  } catch (e) {
+    errEl.textContent = e.message || 'Error. Verifica la clave y completa el motivo.';
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="2"/>
+      <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2"/>
+      <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg> Eliminar`;
+  }
 }
 
 /* ── PASSWORD MODAL ────────────────────────────────────────── */

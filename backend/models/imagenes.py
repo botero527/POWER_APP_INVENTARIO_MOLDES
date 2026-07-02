@@ -4,7 +4,6 @@ TABLE = 'AppControlInventarios_Imagenes'
 
 
 def parse_nombre(nombre):
-    """Descompone 'M|1244|000|000' en dict con tipo/cod/ver/pieza."""
     parts = (nombre or '').split('|')
     return {
         'tipo':    parts[0] if len(parts) > 0 else '',
@@ -44,26 +43,31 @@ def get_by_id(id_img):
 
 def find_for_tool(tipo, cod, version, pieza):
     """
-    Busca la imagen mas especifica para un molde dado.
+    Busca la imagen más específica en una sola query usando CASE para prioridad.
     Wildcards: XXXX (cod), XXX (version/pieza).
-    Orden de especificidad: 4 campos exactos > 3 > 2 > 1.
     """
-    wildcards = [
-        (tipo, cod,    version, pieza),    # exacto
-        (tipo, cod,    version, 'XXX'),
-        (tipo, cod,    'XXX',   pieza),
-        (tipo, 'XXXX', version, pieza),
-        (tipo, cod,    'XXX',   'XXX'),
-        (tipo, 'XXXX', version, 'XXX'),
-        (tipo, 'XXXX', 'XXX',   pieza),
-        (tipo, 'XXXX', 'XXX',   'XXX'),
+    candidates = [
+        f"{tipo}|{cod}|{version}|{pieza}",    # 8 puntos — más específico
+        f"{tipo}|{cod}|{version}|XXX",          # 7
+        f"{tipo}|{cod}|XXX|{pieza}",            # 6
+        f"{tipo}|XXXX|{version}|{pieza}",       # 5
+        f"{tipo}|{cod}|XXX|XXX",                # 4
+        f"{tipo}|XXXX|{version}|XXX",           # 3
+        f"{tipo}|XXXX|XXX|{pieza}",             # 2
+        f"{tipo}|XXXX|XXX|XXX",                 # 1 — más genérico
     ]
-    for t, c, v, p in wildcards:
-        nombre = f"{t}|{c}|{v}|{p}"
-        rows = query(f"SELECT * FROM dbo.[{TABLE}] WHERE Nombre_Imagen = ?", [nombre])
-        if rows:
-            return rows[0]
-    return None
+    placeholders = ','.join(['?'] * len(candidates))
+    case_when = ' '.join(
+        f"WHEN Nombre_Imagen=? THEN {len(candidates) - i}"
+        for i, _ in enumerate(candidates)
+    )
+    rows = query(
+        f"SELECT TOP 1 * FROM dbo.[{TABLE}] "
+        f"WHERE Nombre_Imagen IN ({placeholders}) "
+        f"ORDER BY CASE {case_when} ELSE 0 END DESC",
+        candidates + candidates  # primera lista para IN, segunda para CASE
+    )
+    return rows[0] if rows else None
 
 
 def create(nombre, cantidad_puntos, puntos_esp_pista, id_storage):
@@ -76,15 +80,17 @@ def create(nombre, cantidad_puntos, puntos_esp_pista, id_storage):
 
 
 def update(id_img, nombre, cantidad_puntos, puntos_esp_pista, id_storage=None):
-    if id_storage:
+    if id_storage is not None:
+        # id_storage explícitamente pasado (puede ser '' para limpiar)
         execute(
             f"""UPDATE dbo.[{TABLE}] SET
                 Nombre_Imagen=?, Cantidad_puntos=?, Puntos_Esp_Pista=?,
                 IdStorage=?, Modif_Date=GETDATE()
                 WHERE id=?""",
-            [nombre, cantidad_puntos, puntos_esp_pista, id_storage, id_img]
+            [nombre, cantidad_puntos, puntos_esp_pista, id_storage or None, id_img]
         )
     else:
+        # Sin archivo nuevo: no tocar IdStorage
         execute(
             f"""UPDATE dbo.[{TABLE}] SET
                 Nombre_Imagen=?, Cantidad_puntos=?, Puntos_Esp_Pista=?,

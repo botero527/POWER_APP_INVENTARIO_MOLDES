@@ -1,4 +1,4 @@
-from backend.db import query, execute
+from backend.db import query, execute, execute_returning, execute_multi
 
 HEAD = 'AppControlInventarios_ManttoHead'
 DET  = 'AppControlInventarios_ManttoDetails'
@@ -22,6 +22,7 @@ def get_all(search=None, estatus=None, is_admin=False):
 
     if not is_admin:
         wheres.append("Estatus = 'Finalizado'")
+        estatus = None  # ignorar filtro externo para no-admins (evita condición imposible)
 
     if search:
         wheres.append("(CAST(CodHer AS VARCHAR) LIKE ? OR CreadoPor LIKE ? OR Adicionales LIKE ?)")
@@ -64,40 +65,37 @@ def get_by_id(id_mant):
     return head
 
 
-def get_next_repeticion(tipo, cod, version, pieza):
-    rows = query(
-        f"SELECT ISNULL(MAX(Repeticion), 0) + 1 AS next_rep FROM dbo.[{HEAD}] "
-        f"WHERE Tipo=? AND CodHer=? AND Version=? AND Pieza=?",
-        [tipo, cod, version, pieza]
-    )
-    return rows[0]['next_rep'] if rows else 1
-
-
 def create(tipo, cod, version, pieza, creado_por, tipo_mant='', adicionales=''):
-    rep = get_next_repeticion(tipo, cod, version, pieza)
-    execute(
+    """Crea un nuevo ManttoHead de forma atómica (calcula Repeticion + INSERT en un statement)."""
+    rows = execute_returning(
         f"""INSERT INTO dbo.[{HEAD}]
-            (Tipo, CodHer, Version, Pieza, Repeticion, Estatus,
-             TipoMant, CreadoPor, Adicionales, FechaCreateMant)
-            VALUES (?,?,?,?,?,'Pendiente',?,?,?,GETDATE())""",
-        [tipo, cod, version, pieza, rep, tipo_mant, creado_por, adicionales]
-    )
-    rows = query(
-        f"SELECT TOP 1 IdManten FROM dbo.[{HEAD}] "
-        f"WHERE Tipo=? AND CodHer=? AND Version=? AND Pieza=? AND Repeticion=?",
-        [tipo, cod, version, pieza, rep]
+                (Tipo, CodHer, Version, Pieza, Repeticion, Estatus,
+                 TipoMant, CreadoPor, Adicionales, FechaCreateMant)
+            OUTPUT INSERTED.IdManten
+            SELECT ?,?,?,?,
+                   ISNULL((SELECT MAX(Repeticion) FROM dbo.[{HEAD}]
+                            WHERE Tipo=? AND CodHer=? AND Version=? AND Pieza=?), 0) + 1,
+                   'Pendiente',?,?,?,GETDATE()""",
+        [tipo, cod, version, pieza,
+         tipo, cod, version, pieza,
+         tipo_mant, creado_por, adicionales]
     )
     return rows[0]['IdManten'] if rows else None
 
 
 def update_head(id_mant, fields: dict):
     allowed = {'TipoMant', 'EstadoPostes', 'Observaciones', 'Entrega',
-               'Recibe', 'Estatus', 'FechaReleaseMant', 'Adicionales'}
+               'Recibe', 'Estatus', 'Adicionales'}
     sets, params = [], []
     for k, v in fields.items():
         if k in allowed:
             sets.append(f"[{k}] = ?")
             params.append(v if v != '' else None)
+
+    # Cuando se finaliza, poner fecha en servidor (nunca desde el cliente)
+    if fields.get('Estatus') == 'Finalizado':
+        sets.append('[FechaReleaseMant] = GETDATE()')
+
     if not sets:
         return
     params.append(id_mant)
@@ -123,5 +121,8 @@ def upsert_detail(id_mant, id_med, clase, value, matricero):
 
 
 def delete(id_mant):
-    execute(f"DELETE FROM dbo.[{DET}] WHERE IdMant=?", [id_mant])
-    execute(f"DELETE FROM dbo.[{HEAD}] WHERE IdManten=?", [id_mant])
+    """Borra detalles y cabecera en una sola transacción."""
+    execute_multi([
+        (f"DELETE FROM dbo.[{DET}] WHERE IdMant=?",    [id_mant]),
+        (f"DELETE FROM dbo.[{HEAD}] WHERE IdManten=?", [id_mant]),
+    ])

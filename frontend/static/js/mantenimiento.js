@@ -6,9 +6,10 @@ let allUsers   = [];
 /* ── IMAGE URL RESOLVER ────────────────────────────────── */
 function resolveImgSrc(idStorage) {
   if (!idStorage) return null;
-  if (idStorage.startsWith('JTJ')) return null;          // URL antigua SharePoint base64
-  if (idStorage.startsWith('https://')) return idStorage; // Azure Blob URL directa
-  return `/static/${idStorage}`;                          // ruta local legada
+  if (idStorage.startsWith('JTJ') || idStorage.startsWith('JTI')) return null; // SharePoint legacy base64
+  if (idStorage.startsWith('https://') || idStorage.startsWith('http://')) return idStorage;
+  if (idStorage.startsWith('/')) return idStorage;
+  return `/static/${idStorage}`;
 }
 
 /* ── INIT ──────────────────────────────────────────────── */
@@ -139,7 +140,7 @@ function renderImgGrid(rows) {
     const imgSrc = resolveImgSrc(r.IdStorage);
 
     const thumbHtml = imgSrc
-      ? `<img src="${imgSrc}" alt="${r.Nombre_Imagen}" />`
+      ? `<img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(r.Nombre_Imagen)}" />`
       : `<span class="no-img">Sin imagen</span>`;
 
     const tipoCls = p.tipo ? `tipo-chip-${p.tipo}` : '';
@@ -148,13 +149,13 @@ function renderImgGrid(rows) {
       <div class="img-card">
         <div class="img-card-thumb">${thumbHtml}</div>
         <div class="img-card-body">
-          <div class="tipo-chip ${tipoCls}">${p.tipo || '?'}</div>
-          <div class="img-card-nombre">${r.Nombre_Imagen}</div>
+          <div class="tipo-chip ${tipoCls}">${escapeHtml(p.tipo) || '?'}</div>
+          <div class="img-card-nombre">${escapeHtml(r.Nombre_Imagen)}</div>
           <div class="img-card-meta">
-            <div><b>Puntos tolerancia:</b> ${r.Cantidad_puntos ?? '--'}</div>
-            <div><b>Esp. pista:</b> ${r.Puntos_Esp_Pista ?? '--'}</div>
-            <div><b>Creado:</b> ${r.Create_Date ?? '--'}</div>
-            <div><b>Modificado:</b> ${r.Modif_Date ?? '--'}</div>
+            <div><b>Puntos tolerancia:</b> ${escapeHtml(r.Cantidad_puntos ?? '--')}</div>
+            <div><b>Esp. pista:</b> ${escapeHtml(r.Puntos_Esp_Pista ?? '--')}</div>
+            <div><b>Creado:</b> ${escapeHtml(r.Create_Date ?? '--')}</div>
+            <div><b>Modificado:</b> ${escapeHtml(r.Modif_Date ?? '--')}</div>
           </div>
         </div>
         <div class="img-card-actions">
@@ -277,8 +278,9 @@ async function openImgEdit(id) {
 
     // Show old image
     const oldBox = document.getElementById('img-preview-old');
-    if (row.IdStorage && !row.IdStorage.startsWith('JTJ')) {
-      oldBox.innerHTML = `<img src="/static/${row.IdStorage}" style="max-height:160px;object-fit:contain;" />`;
+    const oldSrc = resolveImgSrc(row.IdStorage);
+    if (oldSrc) {
+      oldBox.innerHTML = `<img src="${escapeHtml(oldSrc)}" style="max-height:160px;object-fit:contain;" />`;
     } else {
       oldBox.innerHTML = `<span class="no-img">Sin imagen almacenada</span>`;
     }
@@ -423,14 +425,14 @@ function renderUsers() {
       <td>
         <div style="display:flex;align-items:center;gap:10px">
           <div class="user-avatar" style="background:${roleColor(u.Rol)}22;color:${roleColor(u.Rol)}">
-            ${u.UserName.charAt(0).toUpperCase()}
+            ${escapeHtml(u.UserName.charAt(0).toUpperCase())}
           </div>
-          <span style="font-weight:500">${u.UserName}</span>
+          <span style="font-weight:500">${escapeHtml(u.UserName)}</span>
         </div>
       </td>
-      <td><span class="rol-tag rol-${u.Rol}">${u.Rol}</span></td>
-      <td>${u.Create_Date || '--'}</td>
-      <td>${u.Modif_Date || '--'}</td>
+      <td><span class="rol-tag rol-${escapeHtml(u.Rol)}">${escapeHtml(u.Rol)}</span></td>
+      <td>${escapeHtml(u.Create_Date || '--')}</td>
+      <td>${escapeHtml(u.Modif_Date || '--')}</td>
       <td>
         <div style="display:flex;gap:4px;justify-content:flex-end">
           <button class="btn-edit" title="Editar" onclick="openUserEdit(${u.UserId})">
@@ -637,13 +639,13 @@ async function buscarHeramentales() {
     }
     tbody.innerHTML = rows.map(r => `
       <tr>
-        <td><span class="rol-tag" style="background:#e8f4f7;color:var(--primary-dk)">${r.Tipo}</span></td>
-        <td style="font-weight:700">${r.CodMolde}</td>
-        <td>${r.Version}</td>
-        <td>${r.Pieza}</td>
-        <td>${r.Vehiculo || '--'}</td>
-        <td style="text-align:center">${r.Repeticion}</td>
-        <td>${r.Adicionales || r.Lote || '--'}</td>
+        <td><span class="rol-tag" style="background:#e8f4f7;color:var(--primary-dk)">${escapeHtml(r.Tipo)}</span></td>
+        <td style="font-weight:700">${escapeHtml(r.CodMolde)}</td>
+        <td>${escapeHtml(r.Version)}</td>
+        <td>${escapeHtml(r.Pieza)}</td>
+        <td>${escapeHtml(r.Vehiculo || '--')}</td>
+        <td style="text-align:center">${escapeHtml(r.Repeticion)}</td>
+        <td>${escapeHtml(r.Adicionales || r.Lote || '--')}</td>
         <td>
           <button class="btn-edit" style="color:var(--primary)" title="Seleccionar"
             onclick="seleccionarHer(${r.IdRegistro})">
@@ -860,6 +862,25 @@ function prevStep() {
 
 /* ── PASO 2: MANTTO HER ──────────────────────────────────── */
 
+// Definido fuera para que removeEventListener funcione (misma referencia)
+function _step2AutoSave() {
+  const label = document.getElementById('step2-save-status');
+  clearTimeout(window._step2Deb);
+  window._step2Deb = setTimeout(async () => {
+    try {
+      await api(`/api/mantenimiento/manttos/${manttoActivoId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          TipoMant:      document.getElementById('mant-tipo-mant').value,
+          EstadoPostes:  document.getElementById('mant-estado-postes').value,
+          Observaciones: document.getElementById('mant-observaciones').value,
+        }),
+      });
+      if (label) { label.textContent = '✓ Guardado automáticamente'; setTimeout(() => label.textContent = '', 2000); }
+    } catch { if (label) label.textContent = 'Error al guardar'; }
+  }, 600);
+}
+
 function loadStep2() {
   // Restaurar valores guardados si los hay
   if (window._step2Data) {
@@ -868,37 +889,20 @@ function loadStep2() {
     document.getElementById('mant-observaciones').value = window._step2Data.Observaciones || '';
   }
 
-  // Auto-save al cambiar
-  const autoSave = () => {
-    const label = document.getElementById('step2-save-status');
-    clearTimeout(window._step2Deb);
-    window._step2Deb = setTimeout(async () => {
-      try {
-        await api(`/api/mantenimiento/manttos/${manttoActivoId}`, {
-          method: 'PUT',
-          body: JSON.stringify({
-            TipoMant:      document.getElementById('mant-tipo-mant').value,
-            EstadoPostes:  document.getElementById('mant-estado-postes').value,
-            Observaciones: document.getElementById('mant-observaciones').value,
-          }),
-        });
-        if (label) { label.textContent = '✓ Guardado automáticamente'; setTimeout(() => label.textContent = '', 2000); }
-      } catch { if (label) label.textContent = 'Error al guardar'; }
-    }, 600);
-  };
-
+  // Quitar listeners previos antes de volver a agregar (evita duplicados)
   ['mant-tipo-mant','mant-estado-postes','mant-observaciones'].forEach(id => {
     const el = document.getElementById(id);
-    el.removeEventListener('input', autoSave);
-    el.removeEventListener('change', autoSave);
-    el.addEventListener('input', autoSave);
-    el.addEventListener('change', autoSave);
+    el.removeEventListener('input', _step2AutoSave);
+    el.removeEventListener('change', _step2AutoSave);
+    el.addEventListener('input', _step2AutoSave);
+    el.addEventListener('change', _step2AutoSave);
   });
 }
 
 async function saveStep2() {
-  const tipo  = document.getElementById('mant-tipo-mant').value;
+  const tipo   = document.getElementById('mant-tipo-mant').value;
   const estado = document.getElementById('mant-estado-postes').value;
+  const obs    = document.getElementById('mant-observaciones').value;
   if (!tipo || !estado) {
     toast('Selecciona el tipo de mantenimiento y el estado de los postes', 'error');
     return false;
@@ -906,12 +910,10 @@ async function saveStep2() {
   try {
     await api(`/api/mantenimiento/manttos/${manttoActivoId}`, {
       method: 'PUT',
-      body: JSON.stringify({
-        TipoMant:      tipo,
-        EstadoPostes:  estado,
-        Observaciones: document.getElementById('mant-observaciones').value,
-      }),
+      body: JSON.stringify({ TipoMant: tipo, EstadoPostes: estado, Observaciones: obs }),
     });
+    // Actualizar cache para que al volver al paso 2 muestre los valores correctos
+    window._step2Data = { ...(window._step2Data || {}), TipoMant: tipo, EstadoPostes: estado, Observaciones: obs };
     return true;
   } catch (e) {
     toast(e.message, 'error');
@@ -937,7 +939,7 @@ async function loadStep3() {
     </div>`;
 
   // Quien entrega = usuario de sesión (se guarda ahora)
-  const entregaName = document.getElementById('mant-username-label')?.textContent || '';
+  const entregaName = (document.getElementById('mant-username-label')?.textContent || '').trim();
   document.getElementById('step3-entrega-name').textContent = entregaName;
   if (entregaName) {
     await api(`/api/mantenimiento/manttos/${manttoActivoId}`, {
@@ -991,9 +993,9 @@ function buildResumenHTML(m) {
     ${medsSections || '<p style="color:var(--text-muted);font-size:13px">Sin mediciones registradas.</p>'}
     <div class="detail-card" style="margin-top:16px">
       <div class="detail-card-title">Detalle del Mantenimiento</div>
-      <div class="detail-row"><span class="detail-label">Tipo mantenimiento</span><span class="detail-value">${m.TipoMant || '--'}</span></div>
-      <div class="detail-row"><span class="detail-label">Estado de postes</span><span class="detail-value">${m.EstadoPostes || '--'}</span></div>
-      <div class="detail-row"><span class="detail-label">Observaciones</span><span class="detail-value">${m.Observaciones || 'No registra'}</span></div>
+      <div class="detail-row"><span class="detail-label">Tipo mantenimiento</span><span class="detail-value">${escapeHtml(m.TipoMant || '--')}</span></div>
+      <div class="detail-row"><span class="detail-label">Estado de postes</span><span class="detail-value">${escapeHtml(m.EstadoPostes || '--')}</span></div>
+      <div class="detail-row"><span class="detail-label">Observaciones</span><span class="detail-value">${escapeHtml(m.Observaciones || 'No registra')}</span></div>
     </div>`;
 }
 
@@ -1092,7 +1094,7 @@ async function finalizarMantto() {
   try {
     await api(`/api/mantenimiento/manttos/${manttoActivoId}`, {
       method: 'PUT',
-      body: JSON.stringify({ Estatus: 'Finalizado', FechaReleaseMant: new Date().toISOString() }),
+      body: JSON.stringify({ Estatus: 'Finalizado' }),  // FechaReleaseMant la pone el servidor
     });
     closeFormMantto();
     toast('¡Mantenimiento finalizado correctamente!', 'success');
@@ -1116,7 +1118,10 @@ async function loadStep1() {
     });
     const imgRow = await api(`/api/mantenimiento/imagenes/buscar?${params}`);
     imgConfig = imgRow;
-  } catch { imgConfig = null; }
+  } catch (e) {
+    if (!e.message?.includes('404')) console.warn('buscar imagen:', e.message);
+    imgConfig = null;
+  }
 
   renderStep1Image();
   renderAjusteInputs();
@@ -1139,9 +1144,9 @@ function renderStep1Image() {
 
 function renderAjusteInputs() {
   const container = document.getElementById('ajuste-inputs');
-  const total = imgConfig?.Cantidad_puntos || 0;
+  const total = parseInt(imgConfig?.Cantidad_puntos, 10) || 0;
 
-  if (!total) {
+  if (total <= 0) {
     container.innerHTML = `<div style="padding:20px;font-size:13px;color:var(--text-muted);line-height:1.7">
       <p><b>Sin puntos configurados</b></p>
       <p>Este herramental no tiene imagen registrada en el sistema.</p>
@@ -1171,7 +1176,9 @@ function renderAjusteInputs() {
 function renderEspesorInputs() {
   const container = document.getElementById('espesor-inputs');
   const puntosRaw = imgConfig?.Puntos_Esp_Pista || '';
-  const puntos = puntosRaw.split(',').map(p => p.trim()).filter(p => p && !isNaN(p)).map(Number);
+  const puntos = [...new Set(
+    puntosRaw.split(',').map(p => p.trim()).filter(p => p !== '' && !isNaN(p)).map(Number)
+  )];
 
   if (!puntos.length) {
     container.innerHTML = `<p style="padding:16px;font-size:13px;color:var(--text-muted)">
@@ -1338,15 +1345,15 @@ function renderManttos() {
 
   tbody.innerHTML = allManttos.map(m => `
     <tr>
-      <td style="white-space:nowrap">${m.FechaCreateMant || '--'}</td>
-      <td>${m.CreadoPor || '--'}</td>
-      <td><span class="rol-tag" style="background:#e8f4f7;color:var(--primary-dk)">${m.Tipo}</span></td>
-      <td style="font-weight:600">${m.CodHer}</td>
-      <td>${m.Version}</td>
-      <td>${m.Pieza}</td>
-      <td style="text-align:center">${m.Repeticion}</td>
-      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.Adicionales || '--'}</td>
-      <td><span class="estatus-badge estatus-${m.Estatus}">${m.Estatus}</span></td>
+      <td style="white-space:nowrap">${escapeHtml(m.FechaCreateMant || '--')}</td>
+      <td>${escapeHtml(m.CreadoPor || '--')}</td>
+      <td><span class="rol-tag" style="background:#e8f4f7;color:var(--primary-dk)">${escapeHtml(m.Tipo)}</span></td>
+      <td style="font-weight:600">${escapeHtml(m.CodHer)}</td>
+      <td>${escapeHtml(m.Version)}</td>
+      <td>${escapeHtml(m.Pieza)}</td>
+      <td style="text-align:center">${escapeHtml(m.Repeticion)}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(m.Adicionales || '--')}</td>
+      <td><span class="estatus-badge estatus-${escapeHtml(m.Estatus)}">${escapeHtml(m.Estatus)}</span></td>
       <td>
         <div style="display:flex;gap:4px">
           ${m.Estatus === 'Pendiente' ? `

@@ -47,6 +47,9 @@
     </div>
     <div class="table-footer">
       <span id="total-label">— registros</span>
+      <button class="btn btn-outline" id="btn-load-more" style="display:none" onclick="loadMore()">
+        Cargar más registros
+      </button>
     </div>
   </div>
 
@@ -171,6 +174,41 @@
       <button class="btn btn-primary" id="btn-save-form">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
         Guardar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ELIMINAR -->
+<div class="modal-overlay hidden" id="modal-delete">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Eliminar Registro</h3>
+      <button class="modal-close" id="btn-close-delete">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="delete-info" style="background:var(--bg);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;line-height:1.8"></div>
+      <div class="form-group">
+        <label for="delete-motivo">Motivo de eliminación <span class="required">*</span></label>
+        <textarea id="delete-motivo" rows="3" placeholder="Ej: Herramental dado de baja por desgaste excesivo..."
+          style="width:100%;resize:vertical;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="delete-password">Clave de administrador <span class="required">*</span></label>
+        <input type="password" id="delete-password" placeholder="••••••••" autocomplete="off" />
+      </div>
+      <p class="error-msg hidden" id="delete-error">Error. Verifica la clave y completa el motivo.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btn-cancel-delete">Cancelar</button>
+      <button class="btn" id="btn-confirm-delete"
+        style="background:var(--danger);color:#fff;border-color:var(--danger)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="2"/>
+          <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2"/>
+          <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        Eliminar
       </button>
     </div>
   </div>

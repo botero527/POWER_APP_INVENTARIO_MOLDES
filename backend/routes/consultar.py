@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, session
-from backend.models.inventario import get_all, get_by_id, create, update, delete, UBICACIONES, TIPOS
+from backend.models.inventario import get_all, get_by_id, create, update, soft_delete, UBICACIONES, TIPOS, PAGE_SIZE
 from backend.models.auth import verify_admin_password
 
 bp = Blueprint('consultar', __name__, url_prefix='/api/consultar')
@@ -14,8 +14,11 @@ def list_items():
         'pieza':     request.args.get('pieza'),
     }
     filters = {k: v for k, v in filters.items() if v}
-    rows = get_all(filters)
-    return jsonify({'data': rows, 'total': len(rows)})
+    offset = int(request.args.get('offset', 0))
+
+    rows, total, has_filters = get_all(filters, offset=offset, limit=PAGE_SIZE)
+    has_more = (not has_filters) and (offset + len(rows) < total)
+    return jsonify({'data': rows, 'total': total, 'has_more': has_more, 'offset': offset})
 
 
 @bp.route('/items/<int:id_registro>', methods=['GET'])
@@ -60,9 +63,19 @@ def update_item(id_registro):
 
 @bp.route('/items/<int:id_registro>', methods=['DELETE'])
 def delete_item(id_registro):
-    if not session.get('admin_verified'):
-        return jsonify({'error': 'No autorizado'}), 403
-    delete(id_registro)
+    body    = request.get_json(silent=True) or {}
+    password = body.get('password', '')
+    motivo   = body.get('motivo', '').strip()
+
+    if not motivo:
+        return jsonify({'error': 'El motivo de eliminación es requerido'}), 400
+
+    # Re-verifica la clave admin en cada eliminación (no depender de sesión)
+    username = verify_admin_password(password)
+    if not username:
+        return jsonify({'error': 'Clave incorrecta'}), 401
+
+    soft_delete(id_registro, motivo, username)
     return jsonify({'ok': True})
 
 

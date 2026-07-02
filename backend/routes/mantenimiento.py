@@ -1,5 +1,6 @@
 import os
 import uuid
+from functools import wraps
 from flask import Blueprint, request, jsonify, session, current_app
 from werkzeug.utils import secure_filename
 from backend.models.imagenes import get_all, get_by_id, find_for_tool, create, update, delete, build_nombre
@@ -18,9 +19,19 @@ def is_admin():
     return session.get('mant_rol') == 'Admin'
 
 
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'mant_username' not in session:
+            return jsonify({'error': 'No autenticado'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
 # ── AUTH ──────────────────────────────────────────────────────────────────────
 
 @bp.route('/usuarios', methods=['GET'])
+@login_required
 def list_usuarios():
     return jsonify(get_usernames())
 
@@ -59,10 +70,10 @@ def me():
 # ── IMAGENES ──────────────────────────────────────────────────────────────────
 
 @bp.route('/imagenes', methods=['GET'])
+@login_required
 def list_imagenes():
     search = request.args.get('search', '').strip()
     rows = get_all(search or None)
-    # Convertir fechas a string
     for r in rows:
         for k in ('Create_Date', 'Modif_Date'):
             if r.get(k):
@@ -71,21 +82,23 @@ def list_imagenes():
 
 
 @bp.route('/imagenes/buscar', methods=['GET'])
+@login_required
 def buscar_imagen():
     tipo    = request.args.get('tipo', '')
     cod     = request.args.get('cod', '')
     version = request.args.get('version', '')
     pieza   = request.args.get('pieza', '')
     row = find_for_tool(tipo, cod, version, pieza)
-    if row:
-        if row.get('Create_Date'):
-            row['Create_Date'] = row['Create_Date'].strftime('%d/%m/%Y %H:%M')
-        if row.get('Modif_Date'):
-            row['Modif_Date'] = row['Modif_Date'].strftime('%d/%m/%Y %H:%M')
+    if not row:
+        return jsonify(None), 404
+    for k in ('Create_Date', 'Modif_Date'):
+        if row.get(k):
+            row[k] = row[k].strftime('%d/%m/%Y %H:%M')
     return jsonify(row)
 
 
 @bp.route('/imagenes/<int:id_img>', methods=['GET'])
+@login_required
 def get_imagen(id_img):
     row = get_by_id(id_img)
     if not row:
@@ -97,6 +110,7 @@ def get_imagen(id_img):
 
 
 @bp.route('/imagenes', methods=['POST'])
+@login_required
 def create_imagen():
     if not is_admin():
         return jsonify({'error': 'Solo administradores'}), 403
@@ -109,13 +123,17 @@ def create_imagen():
     puntos_esp      = request.form.get('puntos_esp_pista', '')
 
     nombre = build_nombre(tipo, cod, version, pieza)
-    id_storage = _save_file(request.files.get('imagen'))
+    try:
+        id_storage = _save_file(request.files.get('imagen'))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 500
 
     create(nombre, cantidad_puntos, puntos_esp, id_storage or '')
     return jsonify({'ok': True}), 201
 
 
 @bp.route('/imagenes/<int:id_img>', methods=['PUT'])
+@login_required
 def update_imagen(id_img):
     if not is_admin():
         return jsonify({'error': 'Solo administradores'}), 403
@@ -128,16 +146,27 @@ def update_imagen(id_img):
     puntos_esp      = request.form.get('puntos_esp_pista', '')
 
     nombre = build_nombre(tipo, cod, version, pieza)
-    id_storage = _save_file(request.files.get('imagen'))
+    try:
+        id_storage = _save_file(request.files.get('imagen'))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 500
 
     update(id_img, nombre, cantidad_puntos, puntos_esp, id_storage)
     return jsonify({'ok': True})
 
 
 @bp.route('/imagenes/<int:id_img>', methods=['DELETE'])
+@login_required
 def delete_imagen(id_img):
     if not is_admin():
         return jsonify({'error': 'Solo administradores'}), 403
+
+    # Eliminar blob de Azure antes de borrar el registro
+    row = get_by_id(id_img)
+    if row and row.get('IdStorage') and row['IdStorage'].startswith('https://'):
+        from backend.blob import delete_image
+        delete_image(row['IdStorage'])
+
     delete(id_img)
     return jsonify({'ok': True})
 
@@ -145,6 +174,7 @@ def delete_imagen(id_img):
 # ── USUARIOS CRUD ─────────────────────────────────────────────────────────────
 
 @bp.route('/users', methods=['GET'])
+@login_required
 def list_users():
     from backend.models.usuarios import get_all
     rows = get_all()
@@ -156,6 +186,7 @@ def list_users():
 
 
 @bp.route('/users', methods=['POST'])
+@login_required
 def create_user():
     if not is_admin():
         return jsonify({'error': 'Solo administradores'}), 403
@@ -171,6 +202,7 @@ def create_user():
 
 
 @bp.route('/users/<int:user_id>', methods=['PUT'])
+@login_required
 def update_user(user_id):
     if not is_admin():
         return jsonify({'error': 'Solo administradores'}), 403
@@ -186,6 +218,7 @@ def update_user(user_id):
 
 
 @bp.route('/users/<int:user_id>', methods=['DELETE'])
+@login_required
 def delete_user(user_id):
     if not is_admin():
         return jsonify({'error': 'Solo administradores'}), 403
@@ -199,6 +232,7 @@ def delete_user(user_id):
 # ── VERIFY USER (para "Quien recibe") ────────────────────────────────────────
 
 @bp.route('/verify-user', methods=['POST'])
+@login_required
 def verify_user():
     body = request.get_json()
     from backend.models.usuarios import verify_login
@@ -211,6 +245,7 @@ def verify_user():
 # ── INVENTARIO SEARCH (para modal crear mantto) ───────────────────────────────
 
 @bp.route('/inventario-search', methods=['GET'])
+@login_required
 def inventario_search():
     from backend.models.inventario import get_all
     filters = {
@@ -219,7 +254,7 @@ def inventario_search():
         'version':   request.args.get('version', '').strip() or None,
         'pieza':     request.args.get('pieza', '').strip() or None,
     }
-    rows = get_all({k: v for k, v in filters.items() if v})
+    rows, _, _ = get_all({k: v for k, v in filters.items() if v})
     for r in rows:
         for k in ('FechaCreacion', 'FechaEdicion'):
             if r.get(k) and hasattr(r[k], 'strftime'):
@@ -230,6 +265,7 @@ def inventario_search():
 # ── MANTENIMIENTOS (ROBOT) ────────────────────────────────────────────────────
 
 @bp.route('/manttos', methods=['GET'])
+@login_required
 def list_manttos():
     from backend.models.mantto import get_all
     search  = request.args.get('search', '').strip()
@@ -239,6 +275,7 @@ def list_manttos():
 
 
 @bp.route('/manttos/<int:id_mant>', methods=['GET'])
+@login_required
 def get_mantto(id_mant):
     from backend.models.mantto import get_by_id
     from backend.models.imagenes import find_for_tool
@@ -255,6 +292,7 @@ def get_mantto(id_mant):
 
 
 @bp.route('/manttos', methods=['POST'])
+@login_required
 def create_mantto():
     body        = request.get_json()
     tipo        = str(body.get('tipo', '')).strip()
@@ -273,14 +311,22 @@ def create_mantto():
 
 
 @bp.route('/manttos/<int:id_mant>', methods=['PUT'])
+@login_required
 def update_mantto(id_mant):
-    body = request.get_json()
+    body = request.get_json(silent=True) or {}
+    MAX_LEN = {'TipoMant': 100, 'EstadoPostes': 100, 'Observaciones': 2000,
+               'Entrega': 100, 'Recibe': 100, 'Estatus': 50, 'Adicionales': 500}
+    for field, max_len in MAX_LEN.items():
+        val = body.get(field)
+        if val and isinstance(val, str) and len(val) > max_len:
+            return jsonify({'error': f'{field} excede longitud máxima ({max_len})'}), 400
     from backend.models.mantto import update_head
     update_head(id_mant, body)
     return jsonify({'ok': True})
 
 
 @bp.route('/manttos/<int:id_mant>/detail', methods=['PUT'])
+@login_required
 def upsert_mantto_detail(id_mant):
     body      = request.get_json()
     id_med    = body.get('id_med')
@@ -293,6 +339,7 @@ def upsert_mantto_detail(id_mant):
 
 
 @bp.route('/manttos/<int:id_mant>', methods=['DELETE'])
+@login_required
 def delete_mantto(id_mant):
     if not is_admin():
         return jsonify({'error': 'Solo administradores'}), 403
@@ -306,4 +353,8 @@ def _save_file(file_obj):
     if not file_obj or not allowed_file(file_obj.filename):
         return None
     from backend.blob import upload_image
-    return upload_image(file_obj, file_obj.filename)
+    try:
+        return upload_image(file_obj, file_obj.filename)
+    except Exception as e:
+        current_app.logger.error(f'Error subiendo imagen a Azure Blob: {e}')
+        raise ValueError(f'No se pudo subir la imagen: {e}') from e
