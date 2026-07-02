@@ -13,22 +13,14 @@ Ejecutar: py scripts/2_migrar_imagenes_azure.py
 import os
 import sys
 import pyodbc
+from dotenv import load_dotenv
 from azure.storage.blob import BlobServiceClient, ContentSettings
 
-# ── Config ────────────────────────────────────────────────────────────────────
-CONN_STR   = (
-    'DRIVER={ODBC Driver 17 for SQL Server};'
-    'SERVER=agpcolombia.database.windows.net;'
-    'DATABASE=AGP_Ingenieria;'
-    'UID=DevIngenieria;'
-    '[PWD=REDACTED];'
-    'Encrypt=yes;TrustServerCertificate=no;'
-)
-AZURE_CONN = (
-    'DefaultEndpointsProtocol=https;AccountName=saagpingenieria;'
-    'AccountKey=REDACTED;'
-    'EndpointSuffix=core.windows.net'
-)
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+
+# ── Config (desde .env) ────────────────────────────────────────────────────────
+CONN_STR   = os.environ['DATABASE_URL']
+AZURE_CONN = os.environ['AZURE_STORAGE_CONNECTION_STRING']
 CONTAINER   = 'inventario-moldes'
 IMAGES_DIR  = os.path.join(os.path.dirname(__file__), 'imagenes_sharepoint')
 
