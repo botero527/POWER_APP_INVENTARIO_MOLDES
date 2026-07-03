@@ -1,7 +1,7 @@
 /* ── VARIABLES ─────────────────────────────────────────────── */
 :root {
-  --primary:     #3a8fa3;
-  --primary-dk:  #2d7a8e;
+  --primary:     #7ecee0;
+  --primary-dk:  #83ccde;
   --primary-lt:  #e8f4f7;
   --accent:      #4db8d0;
   --bg:          #f0f4f7;
@@ -41,7 +41,7 @@ a { text-decoration: none; color: inherit; }
 .topbar {
   position: fixed; top: 0; left: 0; right: 0; z-index: 100;
   height: var(--topbar-h);
-  background: linear-gradient(135deg, #3a8fa3 0%, #2d7a8e 100%);
+  background: linear-gradient(135deg, #87d1e2 0%, #7acbdf 100%);
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 20px;
   box-shadow: 0 2px 12px rgba(45,122,142,.35);

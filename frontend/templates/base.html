@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}Gestión de Inventarios{% endblock %} — AGP</title>
+  <title>{% block title %}Herramentales De Curvado Colombia {% endblock %} — AGP</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
@@ -15,10 +15,12 @@
       {% block back_button %}{% endblock %}
     </div>
     <div class="topbar-center">
-      <span class="topbar-title">Gestión de Inventarios Ingeniería</span>
+      <span class="topbar-title">Herramentales De Curvado Colombia </span>
     </div>
     <div class="topbar-right">
+      {% block topbar_right %}
       <div class="agp-logo">AGP</div>
+      {% endblock %}
     </div>
   </header>
 

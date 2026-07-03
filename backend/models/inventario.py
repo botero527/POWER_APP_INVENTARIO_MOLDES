@@ -43,12 +43,12 @@ def get_all(filters=None, offset=0, limit=None):
 
     # Sin filtros: paginación. Con filtros: trae todo
     if has_filters or limit is None:
-        sql = f"SELECT * FROM dbo.[{TABLE}] {where} ORDER BY CodMolde, Repeticion"
+        sql = f"SELECT * FROM dbo.[{TABLE}] {where} ORDER BY FechaCreacion DESC, IdRegistro DESC"
         rows = query(sql, params)
     else:
         sql = (
             f"SELECT * FROM dbo.[{TABLE}] {where} "
-            f"ORDER BY CodMolde, Repeticion "
+            f"ORDER BY FechaCreacion DESC, IdRegistro DESC "
             f"OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
         )
         rows = query(sql, params + [offset, limit])

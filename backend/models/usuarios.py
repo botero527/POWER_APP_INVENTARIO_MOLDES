@@ -48,11 +48,14 @@ def verify_login(username, password):
 
     # Migración automática: si la contraseña era plaintext, actualizarla a bcrypt
     if _BCRYPT_OK and not (user['Password'] or '').startswith('$2b$'):
-        hashed = _hash(password)
-        execute(
-            "UPDATE dbo.AppControlInventarios_UserLog SET Password=?, Modif_Date=GETDATE() WHERE UserId=?",
-            [hashed, user['UserId']]
-        )
+        try:
+            hashed = _hash(password)
+            execute(
+                "UPDATE dbo.AppControlInventarios_UserLog SET Password=?, Modif_Date=GETDATE() WHERE UserId=?",
+                [hashed, user['UserId']]
+            )
+        except Exception:
+            pass  # fallo al migrar no bloquea el login
 
     return {k: user[k] for k in ('UserId', 'UserName', 'Rol')}
 

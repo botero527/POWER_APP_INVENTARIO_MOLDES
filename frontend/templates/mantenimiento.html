@@ -56,129 +56,25 @@
   </div>
 </div>
 
-<!-- ── APP SCREEN ─────────────────────────────────────── -->
-<div id="app-screen" class="hidden">
-
-  <div class="mant-header">
-    <div class="tabs" id="tabs">
-      <button class="tab active" data-tab="edit-jpg">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><polyline points="21,15 16,10 5,21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Gestión de Imágenes
-      </button>
-      <button class="tab" data-tab="edit-users">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/><path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" stroke-width="2"/><path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2"/></svg>
-        Usuarios
-      </button>
-      <button class="tab" data-tab="edit-input">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/><line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/><line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/></svg>
-        Configuración
-      </button>
-    </div>
-    <div class="mant-user-info">
-      <button class="btn-robot" id="btn-robot" title="Registro de Mantenimientos">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="8" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 8V6a4 4 0 0 1 8 0v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="14" r="1.5" fill="currentColor"/><circle cx="15" cy="14" r="1.5" fill="currentColor"/><path d="M9 18h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        Mantenimientos
-      </button>
-      <span id="mant-username-label"></span>
-      <span class="role-badge" id="mant-role-badge"></span>
-      <button class="btn btn-outline btn-sm" id="btn-logout">Salir</button>
-    </div>
-  </div>
-
-  <!-- TAB: EDIT JPG -->
-  <div class="tab-content active" id="tab-edit-jpg">
-    <div class="tab-toolbar">
-      <div class="search-box">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <input type="text" id="img-search" placeholder="Buscar por nombre, tipo, código..." />
-      </div>
-      <button class="btn btn-primary" id="btn-img-add">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
-        Agregar Imagen
-      </button>
-    </div>
-
-    <div class="img-grid" id="img-grid">
-      <div class="grid-loading">
-        <span class="spinner"></span> Cargando imágenes...
-      </div>
-    </div>
-  </div>
-
-  <!-- TAB: EDIT USERS -->
-  <div class="tab-content" id="tab-edit-users">
-
-    <!-- Stats cards -->
-    <div class="user-stats" id="user-stats"></div>
-
-    <!-- Toolbar -->
-    <div class="tab-toolbar" style="margin-top:16px">
-      <div class="filters-row">
-        <div class="search-box">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          <input type="text" id="user-search" placeholder="Buscar usuario..." />
-        </div>
-        <div class="role-filter-pills" id="role-pills">
-          <button class="pill active" data-role="">Todos</button>
-          <button class="pill" data-role="Admin">Admin</button>
-          <button class="pill" data-role="Hornero">Hornero</button>
-          <button class="pill" data-role="Matricero">Matricero</button>
-        </div>
-      </div>
-      <button class="btn btn-primary" id="btn-user-add">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/><line x1="19" y1="8" x2="19" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="22" y1="11" x2="16" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        Nuevo Usuario
-      </button>
-    </div>
-
-    <!-- Table -->
-    <div class="table-section" style="margin-top:0">
-      <div class="table-wrapper">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Usuario</th>
-              <th>Rol</th>
-              <th>Fecha Creación</th>
-              <th>Fecha Modificación</th>
-              <th style="width:80px"></th>
-            </tr>
-          </thead>
-          <tbody id="users-tbody">
-            <tr class="row-loading"><td colspan="5"><span class="spinner"></span></td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="table-footer">
-        <span id="users-count-label">— usuarios</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- TAB: EDIT INPUT -->
-  <div class="tab-content" id="tab-edit-input">
-    <div class="coming-soon">
-      <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.5"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="1.5"/></svg>
-      <p>Próximamente — cuéntame qué va aquí</p>
-    </div>
-  </div>
-
-</div>
-
 <!-- ── MANTTO SCREEN (Robot) ──────────────────────────── -->
 <div id="mantto-screen" class="hidden">
 
   <!-- Header mantto -->
   <div class="mantto-header">
-    <button class="btn btn-outline btn-sm" id="btn-back-mantto">
+    <a href="/" class="btn btn-outline btn-sm">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="15,18 9,12 15,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      Volver
-    </button>
+      Inicio
+    </a>
     <h2 class="mantto-title">Registro de Mantenimientos</h2>
-    <button class="btn btn-primary btn-sm" id="btn-mantto-add">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
-      Nuevo
-    </button>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span id="mant-username-label" style="font-size:13px;color:var(--text-muted)"></span>
+      <span class="role-badge" id="mant-role-badge"></span>
+      <button class="btn btn-outline btn-sm" id="btn-logout">Salir</button>
+      <button class="btn btn-primary btn-sm" id="btn-mantto-add">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+        Nuevo
+      </button>
+    </div>
   </div>
 
   <!-- LISTA DE MANTENIMIENTOS -->
@@ -220,8 +116,10 @@
           </tbody>
         </table>
       </div>
-      <div class="table-footer">
+      <div class="table-footer" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
         <span id="mantto-count-label">—</span>
+        <button id="btn-mantto-load-more" class="btn btn-outline btn-sm" style="display:none"
+          onclick="loadMoreManttos()">Cargar más registros</button>
       </div>
     </div>
   </div>
@@ -368,7 +266,7 @@
             <div class="step1-subtab-content active" id="subtab-ajuste">
               <div class="subtab-header">
                 <span class="subtab-title">Puntos de Ajuste</span>
-                <span class="subtab-hint">Valor de ajuste por punto</span>
+                <span class="subtab-hint">Escribe el valor y presiona ✓ para guardar cada punto</span>
               </div>
               <div id="ajuste-inputs" class="measure-list">
                 <div class="grid-loading"><span class="spinner"></span></div>
@@ -379,7 +277,7 @@
             <div class="step1-subtab-content" id="subtab-espesor">
               <div class="subtab-header">
                 <span class="subtab-title">Espesor de Pista</span>
-                <span class="subtab-hint">Solo puntos definidos en imagen</span>
+                <span class="subtab-hint">Escribe el valor y presiona ✓ para guardar cada punto</span>
               </div>
               <div id="espesor-inputs" class="measure-list">
                 <div class="grid-loading"><span class="spinner"></span></div>
@@ -513,128 +411,51 @@
   </div>
 </div>
 
-<!-- ── MODAL IMAGEN ───────────────────────────────────── -->
-<div class="modal-overlay hidden" id="modal-img">
-  <div class="modal modal-lg">
-    <div class="modal-header">
-      <h3 id="modal-img-title">Agregar Imagen</h3>
-      <button class="modal-close" id="btn-close-img">&times;</button>
+<!-- ── MODAL CANCELAR MANTTO ──────────────────────────── -->
+<div class="modal-overlay hidden" id="modal-cancel-mantto">
+  <div class="modal" style="max-width:440px;border-radius:16px;overflow:hidden">
+    <!-- Franja de advertencia -->
+    <div style="background:linear-gradient(135deg,#fff1f0,#ffe4e1);padding:20px 24px 16px;border-bottom:1px solid #fecaca;display:flex;align-items:flex-start;gap:14px">
+      <div style="width:40px;height:40px;border-radius:50%;background:#fee2e2;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="#ef4444" stroke-width="2" stroke-linejoin="round"/>
+          <line x1="12" y1="9" x2="12" y2="13" stroke="#ef4444" stroke-width="2" stroke-linecap="round"/>
+          <line x1="12" y1="17" x2="12.01" y2="17" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:15px;font-weight:700;color:#b91c1c;margin-bottom:4px">Cancelar mantenimiento</div>
+        <div id="cancel-mantto-info" style="font-size:12.5px;color:#7f1d1d;line-height:1.5"></div>
+      </div>
+      <button class="btn-icon" id="btn-close-cancel-mantto" style="color:#ef4444;opacity:.7">✕</button>
     </div>
-    <div class="modal-body">
-      <div class="img-editor-grid">
-        <!-- Previa -->
-        <div class="img-preview-col">
-          <p class="col-label">Imagen actual</p>
-          <div class="img-preview-box" id="img-preview-old">
-            <span class="no-img">Sin imagen</span>
-          </div>
-        </div>
-        <div class="img-preview-col">
-          <p class="col-label">Nueva imagen</p>
-          <div class="img-preview-box img-drop-zone" id="img-drop-zone">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="1.5"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="1.5"/></svg>
-            <p>Arrastra aquí o <label class="link" for="img-file-input">selecciona un archivo</label></p>
-            <input type="file" id="img-file-input" accept="image/*" class="hidden" />
-          </div>
-          <img id="img-preview-new" class="hidden img-preview-thumb" alt="Vista previa" />
-        </div>
-      </div>
 
-      <div class="form-grid mt-16">
-        <div class="form-group">
-          <label>Tipo <span class="required">*</span></label>
-          <div class="select-wrapper">
-            <select id="img-tipo">
-              <option value="">-- Tipo --</option>
-              <option value="M">M</option>
-              <option value="G">G</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Código Herramental <small class="text-muted">(vacío = cualquiera)</small></label>
-          <input type="text" id="img-cod" placeholder="XXXX" />
-        </div>
-        <div class="form-group">
-          <label>Versión <small class="text-muted">(vacío = cualquiera)</small></label>
-          <input type="text" id="img-version" placeholder="XXX" />
-        </div>
-        <div class="form-group">
-          <label>Pieza <small class="text-muted">(vacío = cualquiera)</small></label>
-          <input type="text" id="img-pieza" placeholder="XXX" />
-        </div>
-        <div class="form-group">
-          <label>Cantidad de Puntos <span class="required">*</span></label>
-          <input type="number" id="img-cantidad" min="1" placeholder="Ej: 26" />
-        </div>
-        <div class="form-group">
-          <label>Puntos Esp. Pista <span class="required">*</span></label>
-          <input type="text" id="img-puntos" placeholder="Ej: 1,7,13,21" />
-        </div>
-      </div>
-
-      <div class="nombre-preview">
-        <span class="nombre-label">Nombre generado:</span>
-        <code id="nombre-generado">--</code>
-      </div>
+    <div class="modal-body" style="padding:20px 24px">
+      <label class="form-label" style="margin-bottom:6px;font-weight:600">
+        Motivo de cancelación
+        <span style="color:var(--danger);margin-left:2px">*</span>
+      </label>
+      <textarea id="cancel-mantto-motivo" class="form-input" rows="3"
+        placeholder="¿Por qué se cancela este mantenimiento?"
+        style="resize:none;border-radius:10px;font-size:13px;line-height:1.5"></textarea>
+      <p id="cancel-mantto-error" class="form-error hidden" style="margin-top:6px"></p>
+      <p style="font-size:11.5px;color:var(--text-muted);margin-top:10px;display:flex;align-items:center;gap:5px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+        Se registrará quién canceló, la fecha y el motivo. Esta acción no se puede deshacer.
+      </p>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" id="btn-cancel-img">Cancelar</button>
-      <button class="btn btn-primary" id="btn-save-img">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="2"/><polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2"/><polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2"/></svg>
-        Guardar
+
+    <div class="modal-footer" style="padding:14px 24px;gap:10px">
+      <button class="btn btn-outline" id="btn-cancel-cancel-mantto" style="border-radius:10px">
+        Volver
       </button>
-    </div>
-  </div>
-</div>
-
-<!-- ── MODAL USUARIO ──────────────────────────────────── -->
-<div class="modal-overlay hidden" id="modal-user">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 id="modal-user-title">Nuevo Usuario</h3>
-      <button class="modal-close" id="btn-close-user">&times;</button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="user-edit-id" />
-      <div class="form-group">
-        <label>Nombre completo <span class="required">*</span></label>
-        <input type="text" id="user-nombre" placeholder="Ej: Ruben Dario" autocomplete="off" />
-      </div>
-      <div class="form-group" style="margin-top:12px">
-        <label>Rol <span class="required">*</span></label>
-        <div class="select-wrapper">
-          <select id="user-rol">
-            <option value="">-- Seleccionar --</option>
-            <option value="Admin">Admin</option>
-            <option value="Hornero">Hornero</option>
-            <option value="Matricero">Matricero</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group" style="margin-top:12px">
-        <label id="user-pw-label">Contraseña <span class="required">*</span></label>
-        <small class="text-muted" id="user-pw-hint" style="display:block;margin-bottom:4px">Puede ser la cédula del usuario</small>
-        <div class="input-icon-wrap">
-          <input type="password" id="user-password" placeholder="••••••••" autocomplete="new-password" />
-          <button class="btn-toggle-pw" id="btn-toggle-user-pw" type="button" tabindex="-1">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
-          </button>
-        </div>
-      </div>
-      <div class="form-group" style="margin-top:12px" id="user-confirm-group">
-        <label>Confirmar Contraseña <span class="required">*</span></label>
-        <div class="input-icon-wrap">
-          <input type="password" id="user-confirm" placeholder="••••••••" autocomplete="new-password" />
-        </div>
-      </div>
-      <p class="error-msg hidden" id="user-error"></p>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" id="btn-cancel-user">Cancelar</button>
-      <button class="btn btn-primary" id="btn-save-user">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="2"/><polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2"/><polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2"/></svg>
-        Guardar
+      <button class="btn" id="btn-confirm-cancel-mantto"
+        style="background:#ef4444;color:#fff;border-radius:10px;font-weight:600;box-shadow:0 2px 8px rgba(239,68,68,.3)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="margin-right:5px">
+          <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="2"/>
+          <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        Confirmar cancelación
       </button>
     </div>
   </div>

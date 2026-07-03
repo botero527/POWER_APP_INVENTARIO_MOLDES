@@ -31,8 +31,8 @@ def login_required(f):
 # ── AUTH ──────────────────────────────────────────────────────────────────────
 
 @bp.route('/usuarios', methods=['GET'])
-@login_required
 def list_usuarios():
+    # Pública: necesaria para llenar el dropdown del login antes de autenticarse
     return jsonify(get_usernames())
 
 
@@ -267,11 +267,32 @@ def inventario_search():
 @bp.route('/manttos', methods=['GET'])
 @login_required
 def list_manttos():
-    from backend.models.mantto import get_all
+    from backend.models.mantto import get_all, PAGE_SIZE
     search  = request.args.get('search', '').strip()
     estatus = request.args.get('estatus', '').strip()
-    rows = get_all(search or None, estatus or None, is_admin())
-    return jsonify(rows)
+    offset  = int(request.args.get('offset', 0))
+    rows, total, has_filters = get_all(
+        search or None, estatus or None, is_admin(),
+        offset=offset, limit=PAGE_SIZE
+    )
+    return jsonify({
+        'data':     rows,
+        'total':    total,
+        'has_more': not has_filters and (offset + len(rows)) < total,
+        'offset':   offset,
+    })
+
+
+@bp.route('/manttos/next-rep', methods=['GET'])
+@login_required
+def next_rep():
+    from backend.models.mantto import next_repeticion
+    tipo    = request.args.get('tipo', '')
+    cod     = request.args.get('cod', '')
+    version = request.args.get('version', '')
+    pieza   = request.args.get('pieza', '')
+    n = next_repeticion(tipo, cod, version, pieza)
+    return jsonify({'next_rep': n})
 
 
 @bp.route('/manttos/<int:id_mant>', methods=['GET'])
@@ -338,13 +359,30 @@ def upsert_mantto_detail(id_mant):
     return jsonify({'ok': True})
 
 
+@bp.route('/manttos/<int:id_mant>/details/batch', methods=['PUT'])
+@login_required
+def upsert_mantto_details_batch(id_mant):
+    body      = request.get_json() or {}
+    items     = body.get('items', [])
+    matricero = session.get('mant_username', '')
+    if not items:
+        return jsonify({'ok': True})
+    from backend.models.mantto import upsert_details_batch
+    upsert_details_batch(id_mant, items, matricero)
+    return jsonify({'ok': True})
+
+
 @bp.route('/manttos/<int:id_mant>', methods=['DELETE'])
 @login_required
 def delete_mantto(id_mant):
     if not is_admin():
         return jsonify({'error': 'Solo administradores'}), 403
-    from backend.models.mantto import delete
-    delete(id_mant)
+    data   = request.get_json(silent=True) or {}
+    motivo = (data.get('motivo') or '').strip()
+    if not motivo:
+        return jsonify({'error': 'El motivo es requerido'}), 400
+    from backend.models.mantto import soft_cancel
+    soft_cancel(id_mant, motivo, session.get('mant_username', 'Admin'))
     return jsonify({'ok': True})
 
 

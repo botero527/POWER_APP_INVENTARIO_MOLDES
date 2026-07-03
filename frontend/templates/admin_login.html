@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Administración — AGP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--bg); }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 40px 36px 36px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.08);
+    }
+    .login-logo {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .login-logo .agp-logo {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 52px;
+      height: 52px;
+      background: var(--primary);
+      color: #fff;
+      font-weight: 700;
+      font-size: 16px;
+      border-radius: 14px;
+      letter-spacing: 1px;
+      margin-bottom: 14px;
+    }
+    .login-logo h2 {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text);
+      margin: 0 0 4px;
+    }
+    .login-logo p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+    .login-form { display: flex; flex-direction: column; gap: 16px; }
+    .login-form .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .login-form label { font-size: 13px; font-weight: 500; color: var(--text); }
+    .login-form input {
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 14px;
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      transition: border-color .15s;
+    }
+    .login-form input:focus { border-color: var(--primary); }
+    .login-form .select-wrapper { position: relative; }
+    .login-form .select-wrapper::after {
+      content: '';
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0; height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 5px solid var(--text-muted);
+      pointer-events: none;
+    }
+    .login-form select {
+      width: 100%;
+      padding: 9px 32px 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 14px;
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      appearance: none;
+      cursor: pointer;
+      transition: border-color .15s;
+    }
+    .login-form select:focus { border-color: var(--primary); }
+    .login-error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: var(--radius-sm);
+      color: #dc2626;
+      font-size: 13px;
+      padding: 10px 12px;
+    }
+    .btn-login {
+      width: 100%;
+      padding: 10px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .btn-login:hover { opacity: .88; }
+    .login-back {
+      text-align: center;
+      margin-top: 18px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .login-back a { color: var(--primary); text-decoration: none; }
+    .login-back a:hover { text-decoration: underline; }
+    header, footer { display: none; }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="agp-logo">AGP</div>
+      <h2>Administración</h2>
+      <p>Acceso restringido — solo administradores</p>
+    </div>
+
+    <form class="login-form" method="POST" action="/admin/login">
+      {% if error %}
+      <div class="login-error">{{ error }}</div>
+      {% endif %}
+
+      <div class="form-group">
+        <label for="username">Usuario</label>
+        <div class="select-wrapper">
+          <select id="username" name="username" autofocus>
+            <option value="">Seleccionar usuario...</option>
+            {% for u in usuarios %}
+            <option value="{{ u.UserName }}" {% if u.UserName == selected %}selected{% endif %}>
+              {{ u.UserName }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="password">Contraseña</label>
+        <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" />
+      </div>
+
+      <button type="submit" class="btn-login">Ingresar</button>
+    </form>
+
+    <div class="login-back">
+      <a href="/">← Volver al inicio</a>
+    </div>
+  </div>
+</body>
+</html>

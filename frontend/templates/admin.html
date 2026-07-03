@@ -1,0 +1,441 @@
+{% extends "base.html" %}
+{% block title %}Administración{% endblock %}
+
+{% block back_button %}
+<a href="/" class="btn-back">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+    <polyline points="13,8 9,12 13,16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</a>
+{% endblock %}
+
+{% block topbar_right %}
+<div style="display:flex;align-items:center;gap:10px">
+  <span style="font-size:13px;color:var(--text-muted)">{{ username }}</span>
+  <form method="POST" action="/admin/logout" style="margin:0">
+    <button type="submit" class="btn btn-outline" style="padding:5px 12px;font-size:12px">
+      Cerrar sesión
+    </button>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/mantenimiento.css') }}" />
+<style>
+  .admin-layout { display:flex; flex-direction:column; height:100%; }
+  .admin-tabs { display:flex; gap:4px; border-bottom:1px solid var(--border); padding:0 0 0 4px; background:var(--surface); flex-shrink:0; }
+  .admin-tab { padding:10px 18px; font-size:13px; font-weight:500; color:var(--text-muted); border:none; background:none; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; display:flex; align-items:center; gap:6px; transition:color .15s; }
+  .admin-tab:hover { color:var(--text); }
+  .admin-tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+  .admin-tab-content { display:none; flex:1; overflow:auto; }
+  .admin-tab-content.active { display:flex; flex-direction:column; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-layout">
+
+  <!-- TABS BAR -->
+  <div class="admin-tabs">
+    <button class="admin-tab active" data-admintab="inventario">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="2"/><line x1="9" y1="21" x2="9" y2="9" stroke="currentColor" stroke-width="2"/></svg>
+      Inventario
+    </button>
+    <button class="admin-tab" data-admintab="imagenes">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><polyline points="21,15 16,10 5,21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Gestión de Imágenes
+    </button>
+    <button class="admin-tab" data-admintab="usuarios">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/><path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" stroke-width="2"/><path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2"/></svg>
+      Usuarios
+    </button>
+  </div>
+
+  <!-- TAB: INVENTARIO -->
+  <div class="admin-tab-content active" id="admintab-inventario">
+    <div class="consultar-layout">
+      <div class="table-section">
+        <div class="table-toolbar">
+          <h2 class="section-title">Inventario de Herramientas</h2>
+          <button class="btn btn-primary" id="btn-agregar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+            Agregar Nuevo
+          </button>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table" id="tabla-inventario">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Tipo</th>
+                <th>CodMolde</th>
+                <th>Versión</th>
+                <th>Pieza</th>
+                <th>Rep.</th>
+                <th>Puesto</th>
+                <th>Ubicación</th>
+                <th>Descripción Vehículo</th>
+                <th>Lote</th>
+                <th>Usos</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-body">
+              <tr class="row-loading"><td colspan="11">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span id="total-label">— registros</span>
+          <button class="btn btn-outline" id="btn-load-more" style="display:none" onclick="loadMore()">
+            Cargar más registros
+          </button>
+        </div>
+      </div>
+      <aside class="filters-sidebar">
+        <div class="filters-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/></svg>
+          Filtros
+        </div>
+        <div class="filter-group">
+          <label>Tipo</label>
+          <div class="select-wrapper">
+            <select id="f-tipo"><option value="">Todos</option></select>
+          </div>
+        </div>
+        <div class="filter-group">
+          <label>CodMolde</label>
+          <input type="text" id="f-cod-molde" placeholder="Buscar..." />
+        </div>
+        <div class="filter-group">
+          <label>Versión</label>
+          <input type="text" id="f-version" placeholder="Buscar..." />
+        </div>
+        <div class="filter-group">
+          <label>Pieza</label>
+          <input type="text" id="f-pieza" placeholder="Buscar..." />
+        </div>
+        <button class="btn btn-outline btn-block" id="btn-limpiar">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="1 4 1 10 7 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 15a9 9 0 1 0 .49-3.36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          Limpiar Filtros
+        </button>
+      </aside>
+    </div>
+  </div>
+
+  <!-- TAB: IMÁGENES -->
+  <div class="admin-tab-content" id="admintab-imagenes">
+    <div class="tab-toolbar">
+      <div class="search-box">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input type="text" id="img-search" placeholder="Buscar por nombre, tipo, código..." />
+      </div>
+      <button class="btn btn-primary" id="btn-img-add">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+        Agregar Imagen
+      </button>
+    </div>
+    <div class="img-grid" id="img-grid">
+      <div class="grid-loading"><span class="spinner"></span> Cargando imágenes...</div>
+    </div>
+  </div>
+
+  <!-- TAB: USUARIOS -->
+  <div class="admin-tab-content" id="admintab-usuarios">
+    <div class="user-stats" id="user-stats"></div>
+    <div class="tab-toolbar" style="margin-top:16px">
+      <div class="filters-row">
+        <div class="search-box">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <input type="text" id="user-search" placeholder="Buscar usuario..." />
+        </div>
+        <div class="role-filter-pills" id="role-pills">
+          <button class="pill active" data-role="">Todos</button>
+          <button class="pill" data-role="Admin">Admin</button>
+          <button class="pill" data-role="Hornero">Hornero</button>
+          <button class="pill" data-role="Matricero">Matricero</button>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btn-user-add">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/><line x1="19" y1="8" x2="19" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="22" y1="11" x2="16" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Nuevo Usuario
+      </button>
+    </div>
+    <div class="table-section" style="margin-top:0">
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Rol</th>
+              <th>Fecha Creación</th>
+              <th>Fecha Modificación</th>
+              <th style="width:80px"></th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody">
+            <tr class="row-loading"><td colspan="5"><span class="spinner"></span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-footer">
+        <span id="users-count-label">— usuarios</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- MODAL CONTRASEÑA (inventario) -->
+<div class="modal-overlay hidden" id="modal-password">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Verificación de Administrador</h3>
+      <button class="modal-close" id="btn-close-password">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p>Ingresa la clave de administrador para continuar.</p>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" id="input-password" placeholder="••••••••" autocomplete="off" />
+      </div>
+      <p class="error-msg hidden" id="password-error">Clave incorrecta. Intenta de nuevo.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btn-cancel-password">Cancelar</button>
+      <button class="btn btn-primary" id="btn-confirm-password">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL FORMULARIO INVENTARIO (Agregar / Editar) -->
+<div class="modal-overlay hidden" id="modal-form">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3 id="modal-form-title">Agregar Nuevo</h3>
+      <button class="modal-close" id="btn-close-form">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="form-id" />
+      <div class="form-grid">
+        <div class="form-group">
+          <label>CodMolde <span class="required">*</span></label>
+          <input type="text" id="form-cod-molde" />
+        </div>
+        <div class="form-group">
+          <label>Vehículo</label>
+          <input type="text" id="form-vehiculo" />
+        </div>
+        <div class="form-group">
+          <label>Lote</label>
+          <input type="text" id="form-lote" />
+        </div>
+        <div class="form-group">
+          <label>Pieza</label>
+          <input type="text" id="form-pieza" />
+        </div>
+        <div class="form-group">
+          <label>Versión</label>
+          <input type="text" id="form-version" />
+        </div>
+        <div class="form-group">
+          <label>Repetición</label>
+          <input type="text" id="form-repeticion" />
+        </div>
+        <div class="form-group">
+          <label>Ubicación</label>
+          <div class="select-wrapper">
+            <select id="form-ubicacion"></select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Puesto</label>
+          <input type="text" id="form-puesto" />
+        </div>
+        <div class="form-group">
+          <label>Usos</label>
+          <input type="number" id="form-usos" value="0" min="0" />
+        </div>
+        <div class="form-group">
+          <label>Tipo</label>
+          <div class="select-wrapper">
+            <select id="form-tipo"></select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btn-cancel-form">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-form">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        Guardar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ELIMINAR INVENTARIO -->
+<div class="modal-overlay hidden" id="modal-delete">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Eliminar Registro</h3>
+      <button class="modal-close" id="btn-close-delete">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="delete-info" style="background:var(--bg);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;line-height:1.8"></div>
+      <div class="form-group">
+        <label for="delete-motivo">Motivo de eliminación <span class="required">*</span></label>
+        <textarea id="delete-motivo" rows="3" placeholder="Ej: Herramental dado de baja por desgaste excesivo..."
+          style="width:100%;resize:vertical;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="delete-password">Clave de administrador <span class="required">*</span></label>
+        <input type="password" id="delete-password" placeholder="••••••••" autocomplete="off" />
+      </div>
+      <p class="error-msg hidden" id="delete-error">Error. Verifica la clave y completa el motivo.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btn-cancel-delete">Cancelar</button>
+      <button class="btn" id="btn-confirm-delete"
+        style="background:var(--danger);color:#fff;border-color:var(--danger)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="2"/>
+          <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2"/>
+          <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        Eliminar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL IMAGEN -->
+<div class="modal-overlay hidden" id="modal-img">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3 id="modal-img-title">Agregar Imagen</h3>
+      <button class="modal-close" id="btn-close-img">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="img-editor-grid">
+        <div class="img-preview-col">
+          <p class="col-label">Imagen actual</p>
+          <div class="img-preview-box" id="img-preview-old">
+            <span class="no-img">Sin imagen</span>
+          </div>
+        </div>
+        <div class="img-preview-col">
+          <p class="col-label">Nueva imagen</p>
+          <div class="img-preview-box img-drop-zone" id="img-drop-zone">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="1.5"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="1.5"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="1.5"/></svg>
+            <p>Arrastra aquí o <label class="link" for="img-file-input">selecciona un archivo</label></p>
+            <input type="file" id="img-file-input" accept="image/*" class="hidden" />
+          </div>
+          <img id="img-preview-new" class="hidden img-preview-thumb" alt="Vista previa" />
+        </div>
+      </div>
+      <div class="form-grid mt-16">
+        <div class="form-group">
+          <label>Tipo <span class="required">*</span></label>
+          <div class="select-wrapper">
+            <select id="img-tipo">
+              <option value="">-- Tipo --</option>
+              <option value="M">M</option>
+              <option value="G">G</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Código Herramental <small class="text-muted">(vacío = cualquiera)</small></label>
+          <input type="text" id="img-cod" placeholder="XXXX" />
+        </div>
+        <div class="form-group">
+          <label>Versión <small class="text-muted">(vacío = cualquiera)</small></label>
+          <input type="text" id="img-version" placeholder="XXX" />
+        </div>
+        <div class="form-group">
+          <label>Pieza <small class="text-muted">(vacío = cualquiera)</small></label>
+          <input type="text" id="img-pieza" placeholder="XXX" />
+        </div>
+        <div class="form-group">
+          <label>Cantidad de Puntos <span class="required">*</span></label>
+          <input type="number" id="img-cantidad" min="1" placeholder="Ej: 26" />
+        </div>
+        <div class="form-group">
+          <label>Puntos Esp. Pista <span class="required">*</span></label>
+          <input type="text" id="img-puntos" placeholder="Ej: 1,7,13,21" />
+        </div>
+      </div>
+      <div class="nombre-preview">
+        <span class="nombre-label">Nombre generado:</span>
+        <code id="nombre-generado">--</code>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btn-cancel-img">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-img">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="2"/><polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2"/><polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2"/></svg>
+        Guardar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL USUARIO -->
+<div class="modal-overlay hidden" id="modal-user">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-user-title">Nuevo Usuario</h3>
+      <button class="modal-close" id="btn-close-user">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="user-edit-id" />
+      <div class="form-group">
+        <label>Nombre completo <span class="required">*</span></label>
+        <input type="text" id="user-nombre" placeholder="Ej: Ruben Dario" autocomplete="off" />
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label>Rol <span class="required">*</span></label>
+        <div class="select-wrapper">
+          <select id="user-rol">
+            <option value="">-- Seleccionar --</option>
+            <option value="Admin">Admin</option>
+            <option value="Hornero">Hornero</option>
+            <option value="Matricero">Matricero</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label id="user-pw-label">Contraseña <span class="required">*</span></label>
+        <small class="text-muted" id="user-pw-hint" style="display:block;margin-bottom:4px">Puede ser la cédula del usuario</small>
+        <div class="input-icon-wrap">
+          <input type="password" id="user-password" placeholder="••••••••" autocomplete="new-password" />
+          <button class="btn-toggle-pw" id="btn-toggle-user-pw" type="button" tabindex="-1">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:12px" id="user-confirm-group">
+        <label>Confirmar Contraseña <span class="required">*</span></label>
+        <div class="input-icon-wrap">
+          <input type="password" id="user-confirm" placeholder="••••••••" autocomplete="new-password" />
+        </div>
+      </div>
+      <p class="error-msg hidden" id="user-error"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btn-cancel-user">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-user">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="2"/><polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2"/><polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2"/></svg>
+        Guardar
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% endblock %}

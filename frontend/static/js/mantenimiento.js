@@ -1,16 +1,4 @@
-/* ── STATE ─────────────────────────────────────────────── */
-let editImgId  = null;
-let editUserId = null;
-let allUsers   = [];
-
-/* ── IMAGE URL RESOLVER ────────────────────────────────── */
-function resolveImgSrc(idStorage) {
-  if (!idStorage) return null;
-  if (idStorage.startsWith('JTJ') || idStorage.startsWith('JTI')) return null; // SharePoint legacy base64
-  if (idStorage.startsWith('https://') || idStorage.startsWith('http://')) return idStorage;
-  if (idStorage.startsWith('/')) return idStorage;
-  return `/static/${idStorage}`;
-}
+﻿/* ── STATE ─────────────────────────────────────────────── */
 
 /* ── INIT ──────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -79,7 +67,7 @@ async function doLogin() {
 
 function showApp(me) {
   document.getElementById('login-screen').classList.add('hidden');
-  document.getElementById('app-screen').classList.remove('hidden');
+  document.getElementById('mantto-screen').classList.remove('hidden');
   document.getElementById('mant-username-label').textContent = me.username || me.UserName;
   document.getElementById('mant-role-badge').textContent = me.rol || me.Rol || '';
 
@@ -88,475 +76,10 @@ function showApp(me) {
     location.reload();
   });
 
-  // Bind everything now that the DOM is visible
-  bindTabs();
-  bindImgModal();
-  bindUserModal();
   bindRobot();
   bindBuscarHer();
   bindRecibeModal();
-
-  // Load first tab
-  loadImgGrid();
-}
-
-/* ── TABS ──────────────────────────────────────────────── */
-function bindTabs() {
-  document.querySelectorAll('.tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
-      if (btn.dataset.tab === 'edit-jpg')   loadImgGrid();
-      if (btn.dataset.tab === 'edit-users') loadUsers();
-    });
-  });
-}
-
-/* ── IMAGE GRID ────────────────────────────────────────── */
-async function loadImgGrid() {
-  const search = document.getElementById('img-search').value.trim();
-  const grid = document.getElementById('img-grid');
-  grid.innerHTML = `<div class="grid-loading"><span class="spinner"></span> Cargando...</div>`;
-
-  try {
-    const rows = await api(`/api/mantenimiento/imagenes?search=${encodeURIComponent(search)}`);
-    renderImgGrid(rows);
-  } catch (e) {
-    grid.innerHTML = `<div class="grid-loading">Error: ${e.message}</div>`;
-  }
-}
-
-function renderImgGrid(rows) {
-  const grid = document.getElementById('img-grid');
-  if (!rows.length) {
-    grid.innerHTML = `<div class="grid-loading">Sin imágenes</div>`;
-    return;
-  }
-
-  grid.innerHTML = rows.map(r => {
-    const p = r._parsed || {};
-    const imgSrc = resolveImgSrc(r.IdStorage);
-
-    const thumbHtml = imgSrc
-      ? `<img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(r.Nombre_Imagen)}" />`
-      : `<span class="no-img">Sin imagen</span>`;
-
-    const tipoCls = p.tipo ? `tipo-chip-${p.tipo}` : '';
-
-    return `
-      <div class="img-card">
-        <div class="img-card-thumb">${thumbHtml}</div>
-        <div class="img-card-body">
-          <div class="tipo-chip ${tipoCls}">${escapeHtml(p.tipo) || '?'}</div>
-          <div class="img-card-nombre">${escapeHtml(r.Nombre_Imagen)}</div>
-          <div class="img-card-meta">
-            <div><b>Puntos tolerancia:</b> ${escapeHtml(r.Cantidad_puntos ?? '--')}</div>
-            <div><b>Esp. pista:</b> ${escapeHtml(r.Puntos_Esp_Pista ?? '--')}</div>
-            <div><b>Creado:</b> ${escapeHtml(r.Create_Date ?? '--')}</div>
-            <div><b>Modificado:</b> ${escapeHtml(r.Modif_Date ?? '--')}</div>
-          </div>
-        </div>
-        <div class="img-card-actions">
-          <button class="img-card-btn edit" onclick="openImgEdit(${r.id})">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2"/></svg>
-            Editar
-          </button>
-          <button class="img-card-btn download" onclick="downloadImg('${imgSrc}','${r.Nombre_Imagen}')">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2"/></svg>
-            Descargar
-          </button>
-          <button class="img-card-btn del" onclick="deleteImg(${r.id},'${r.Nombre_Imagen}')">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="2"/><path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2"/><path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            Eliminar
-          </button>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-/* ── DOWNLOAD ──────────────────────────────────────────── */
-function downloadImg(src, nombre) {
-  if (!src) { toast('Esta imagen no tiene archivo guardado', 'error'); return; }
-  const a = document.createElement('a');
-  a.href = src; a.download = nombre; a.click();
-}
-
-/* ── DELETE ────────────────────────────────────────────── */
-async function deleteImg(id, nombre) {
-  if (!confirm(`¿Eliminar la imagen "${nombre}"?`)) return;
-  try {
-    await api(`/api/mantenimiento/imagenes/${id}`, { method: 'DELETE' });
-    toast('Imagen eliminada', 'success');
-    loadImgGrid();
-  } catch (e) {
-    toast(e.message, 'error');
-  }
-}
-
-/* ── IMG MODAL ─────────────────────────────────────────── */
-function bindImgModal() {
-  // Search debounce
-  let deb;
-  document.getElementById('img-search').addEventListener('input', () => {
-    clearTimeout(deb); deb = setTimeout(loadImgGrid, 350);
-  });
-
-  document.getElementById('btn-img-add').addEventListener('click', () => openImgAdd());
-  document.getElementById('btn-close-img').addEventListener('click', closeImgModal);
-  document.getElementById('btn-cancel-img').addEventListener('click', closeImgModal);
-  document.getElementById('btn-save-img').addEventListener('click', saveImg);
-
-  // File drag/drop
-  const dropZone = document.getElementById('img-drop-zone');
-  const fileInput = document.getElementById('img-file-input');
-
-  dropZone.addEventListener('click', () => fileInput.click());
-  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-  dropZone.addEventListener('drop', e => {
-    e.preventDefault(); dropZone.classList.remove('drag-over');
-    if (e.dataTransfer.files[0]) setPreviewFile(e.dataTransfer.files[0]);
-  });
-  fileInput.addEventListener('change', () => {
-    if (fileInput.files[0]) setPreviewFile(fileInput.files[0]);
-  });
-
-  // Live nombre preview
-  ['img-tipo','img-cod','img-version','img-pieza'].forEach(id => {
-    document.getElementById(id).addEventListener('input', updateNombrePreview);
-    document.getElementById(id).addEventListener('change', updateNombrePreview);
-  });
-}
-
-function setPreviewFile(file) {
-  const reader = new FileReader();
-  reader.onload = e => {
-    const prev = document.getElementById('img-preview-new');
-    prev.src = e.target.result;
-    prev.classList.remove('hidden');
-    document.getElementById('img-drop-zone').classList.add('hidden');
-  };
-  reader.readAsDataURL(file);
-  document.getElementById('img-file-input')._file = file;
-}
-
-function updateNombrePreview() {
-  const tipo    = document.getElementById('img-tipo').value;
-  const cod     = document.getElementById('img-cod').value.trim()     || 'XXXX';
-  const version = document.getElementById('img-version').value.trim() || 'XXX';
-  const pieza   = document.getElementById('img-pieza').value.trim()   || 'XXX';
-  document.getElementById('nombre-generado').textContent =
-    tipo ? `${tipo}|${cod}|${version}|${pieza}` : '--';
-}
-
-function openImgAdd() {
-  editImgId = null;
-  document.getElementById('modal-img-title').textContent = 'Agregar Imagen';
-  resetImgForm();
-  document.getElementById('modal-img').classList.remove('hidden');
-}
-
-async function openImgEdit(id) {
-  editImgId = id;
-  document.getElementById('modal-img-title').textContent = 'Editar Imagen';
-  resetImgForm();
-
-  try {
-    const row = await api(`/api/mantenimiento/imagenes/${id}`);
-    const p = row._parsed || {};
-
-    document.getElementById('img-tipo').value    = p.tipo    || '';
-    document.getElementById('img-cod').value     = p.cod === 'XXXX' ? '' : (p.cod || '');
-    document.getElementById('img-version').value = p.version === 'XXX' ? '' : (p.version || '');
-    document.getElementById('img-pieza').value   = p.pieza   === 'XXX' ? '' : (p.pieza || '');
-    document.getElementById('img-cantidad').value = row.Cantidad_puntos || '';
-    document.getElementById('img-puntos').value   = row.Puntos_Esp_Pista || '';
-    updateNombrePreview();
-
-    // Show old image
-    const oldBox = document.getElementById('img-preview-old');
-    const oldSrc = resolveImgSrc(row.IdStorage);
-    if (oldSrc) {
-      oldBox.innerHTML = `<img src="${escapeHtml(oldSrc)}" style="max-height:160px;object-fit:contain;" />`;
-    } else {
-      oldBox.innerHTML = `<span class="no-img">Sin imagen almacenada</span>`;
-    }
-  } catch (e) {
-    toast(e.message, 'error');
-    return;
-  }
-
-  document.getElementById('modal-img').classList.remove('hidden');
-}
-
-function resetImgForm() {
-  ['img-tipo','img-cod','img-version','img-pieza','img-cantidad','img-puntos'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el.tagName === 'SELECT') el.selectedIndex = 0;
-    else el.value = '';
-  });
-  document.getElementById('img-preview-old').innerHTML = `<span class="no-img">Sin imagen</span>`;
-  document.getElementById('img-preview-new').classList.add('hidden');
-  document.getElementById('img-drop-zone').classList.remove('hidden');
-  document.getElementById('img-file-input').value = '';
-  document.getElementById('img-file-input')._file = null;
-  document.getElementById('nombre-generado').textContent = '--';
-}
-
-function closeImgModal() {
-  document.getElementById('modal-img').classList.add('hidden');
-  editImgId = null;
-}
-
-async function saveImg() {
-  const tipo     = document.getElementById('img-tipo').value;
-  const cantidad = document.getElementById('img-cantidad').value;
-  const puntos   = document.getElementById('img-puntos').value.trim();
-
-  if (!tipo)     { toast('Selecciona un Tipo', 'error'); return; }
-  if (!cantidad) { toast('Ingresa la Cantidad de Puntos', 'error'); return; }
-  if (!puntos)   { toast('Ingresa los Puntos Esp. Pista', 'error'); return; }
-
-  const fd = new FormData();
-  fd.append('tipo',            tipo);
-  fd.append('cod',             document.getElementById('img-cod').value.trim());
-  fd.append('version',         document.getElementById('img-version').value.trim());
-  fd.append('pieza',           document.getElementById('img-pieza').value.trim());
-  fd.append('cantidad_puntos', cantidad);
-  fd.append('puntos_esp_pista', puntos);
-
-  const fileInp = document.getElementById('img-file-input');
-  if (fileInp.files[0]) fd.append('imagen', fileInp.files[0]);
-
-  const btn = document.getElementById('btn-save-img');
-  btn.disabled = true;
-
-  try {
-    const url    = editImgId ? `/api/mantenimiento/imagenes/${editImgId}` : '/api/mantenimiento/imagenes';
-    const method = editImgId ? 'PUT' : 'POST';
-    const res = await fetch(url, { method, body: fd });
-    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Error'); }
-    toast(editImgId ? 'Imagen actualizada' : 'Imagen creada', 'success');
-    closeImgModal();
-    loadImgGrid();
-  } catch (e) {
-    toast(e.message, 'error');
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-/* ══════════════════════════════════════════════════════════
-   USUARIOS
-══════════════════════════════════════════════════════════ */
-
-async function loadUsers() {
-  const tbody = document.getElementById('users-tbody');
-  tbody.innerHTML = `<tr class="row-loading"><td colspan="5"><span class="spinner"></span></td></tr>`;
-  try {
-    allUsers = await api('/api/mantenimiento/users');
-    renderUsers();
-    renderUserStats();
-  } catch (e) {
-    tbody.innerHTML = `<tr class="row-loading"><td colspan="5">Error: ${e.message}</td></tr>`;
-  }
-}
-
-function renderUserStats() {
-  const total    = allUsers.length;
-  const admins   = allUsers.filter(u => u.Rol === 'Admin').length;
-  const horneros = allUsers.filter(u => u.Rol === 'Hornero').length;
-  const matric   = allUsers.filter(u => u.Rol === 'Matricero').length;
-
-  document.getElementById('user-stats').innerHTML = `
-    <div class="stat-card">
-      <div class="stat-icon stat-icon-total">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2"/></svg>
-      </div>
-      <div><div class="stat-num">${total}</div><div class="stat-label">Total</div></div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-icon stat-icon-admin">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-      </div>
-      <div><div class="stat-num">${admins}</div><div class="stat-label">Admins</div></div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-icon stat-icon-horn">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      </div>
-      <div><div class="stat-num">${horneros}</div><div class="stat-label">Horneros</div></div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-icon stat-icon-mat">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </div>
-      <div><div class="stat-num">${matric}</div><div class="stat-label">Matriceros</div></div>
-    </div>
-  `;
-}
-
-function renderUsers() {
-  const search     = document.getElementById('user-search').value.toLowerCase();
-  const activeRole = document.querySelector('#role-pills .pill.active')?.dataset.role || '';
-
-  const filtered = allUsers.filter(u => {
-    const matchName = u.UserName.toLowerCase().includes(search);
-    const matchRole = !activeRole || u.Rol === activeRole;
-    return matchName && matchRole;
-  });
-
-  document.getElementById('users-count-label').textContent =
-    `${filtered.length} de ${allUsers.length} usuario${allUsers.length !== 1 ? 's' : ''}`;
-
-  const tbody = document.getElementById('users-tbody');
-  if (!filtered.length) {
-    tbody.innerHTML = `<tr class="row-loading"><td colspan="5">Sin resultados</td></tr>`;
-    return;
-  }
-
-  const myId = null; // session ID not used in render
-
-  tbody.innerHTML = filtered.map(u => `
-    <tr>
-      <td>
-        <div style="display:flex;align-items:center;gap:10px">
-          <div class="user-avatar" style="background:${roleColor(u.Rol)}22;color:${roleColor(u.Rol)}">
-            ${escapeHtml(u.UserName.charAt(0).toUpperCase())}
-          </div>
-          <span style="font-weight:500">${escapeHtml(u.UserName)}</span>
-        </div>
-      </td>
-      <td><span class="rol-tag rol-${escapeHtml(u.Rol)}">${escapeHtml(u.Rol)}</span></td>
-      <td>${escapeHtml(u.Create_Date || '--')}</td>
-      <td>${escapeHtml(u.Modif_Date || '--')}</td>
-      <td>
-        <div style="display:flex;gap:4px;justify-content:flex-end">
-          <button class="btn-edit" title="Editar" onclick="openUserEdit(${u.UserId})">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2"/></svg>
-          </button>
-          <button class="btn-edit" title="Eliminar" style="color:var(--danger)" onclick="deleteUser(${u.UserId},'${u.UserName}')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="2"/><path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2"/><path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          </button>
-        </div>
-      </td>
-    </tr>
-  `).join('');
-}
-
-function roleColor(rol) {
-  return { Admin: '#c17f24', Hornero: '#2e9e5b', Matricero: '#7c5cbf' }[rol] || '#3a8fa3';
-}
-
-/* ── USER MODAL ────────────────────────────────────────── */
-function bindUserModal() {
-  document.getElementById('btn-user-add').addEventListener('click', openUserAdd);
-  document.getElementById('btn-close-user').addEventListener('click', closeUserModal);
-  document.getElementById('btn-cancel-user').addEventListener('click', closeUserModal);
-  document.getElementById('btn-save-user').addEventListener('click', saveUser);
-  document.getElementById('btn-toggle-user-pw').addEventListener('click', () => {
-    const inp = document.getElementById('user-password');
-    inp.type = inp.type === 'password' ? 'text' : 'password';
-  });
-
-  // Search + filter
-  let deb;
-  document.getElementById('user-search').addEventListener('input', () => {
-    clearTimeout(deb); deb = setTimeout(renderUsers, 200);
-  });
-  document.querySelectorAll('#role-pills .pill').forEach(p => {
-    p.addEventListener('click', () => {
-      document.querySelectorAll('#role-pills .pill').forEach(x => x.classList.remove('active'));
-      p.classList.add('active');
-      renderUsers();
-    });
-  });
-}
-
-function openUserAdd() {
-  editUserId = null;
-  document.getElementById('modal-user-title').textContent = 'Nuevo Usuario';
-  document.getElementById('user-edit-id').value = '';
-  document.getElementById('user-nombre').value = '';
-  document.getElementById('user-rol').value = '';
-  document.getElementById('user-password').value = '';
-  document.getElementById('user-confirm').value = '';
-  document.getElementById('user-pw-label').innerHTML = 'Contraseña <span class="required">*</span>';
-  document.getElementById('user-pw-hint').style.display = 'block';
-  document.getElementById('user-confirm-group').style.display = 'block';
-  document.getElementById('user-error').classList.add('hidden');
-  document.getElementById('modal-user').classList.remove('hidden');
-}
-
-function openUserEdit(id) {
-  const u = allUsers.find(x => x.UserId === id);
-  if (!u) return;
-  editUserId = id;
-  document.getElementById('modal-user-title').textContent = 'Editar Usuario';
-  document.getElementById('user-edit-id').value = id;
-  document.getElementById('user-nombre').value = u.UserName;
-  document.getElementById('user-rol').value = u.Rol;
-  document.getElementById('user-password').value = '';
-  document.getElementById('user-confirm').value = '';
-  document.getElementById('user-pw-label').innerHTML = 'Nueva Contraseña <small class="text-muted">(dejar vacío para no cambiar)</small>';
-  document.getElementById('user-pw-hint').style.display = 'none';
-  document.getElementById('user-confirm-group').style.display = 'block';
-  document.getElementById('user-error').classList.add('hidden');
-  document.getElementById('modal-user').classList.remove('hidden');
-}
-
-function closeUserModal() {
-  document.getElementById('modal-user').classList.add('hidden');
-  editUserId = null;
-}
-
-async function saveUser() {
-  const nombre   = document.getElementById('user-nombre').value.trim();
-  const rol      = document.getElementById('user-rol').value;
-  const password = document.getElementById('user-password').value;
-  const confirm  = document.getElementById('user-confirm').value;
-  const errEl    = document.getElementById('user-error');
-  errEl.classList.add('hidden');
-
-  if (!nombre) { errEl.textContent = 'El nombre es requerido.'; errEl.classList.remove('hidden'); return; }
-  if (!rol)    { errEl.textContent = 'Selecciona un rol.';      errEl.classList.remove('hidden'); return; }
-  if (!editUserId && !password) { errEl.textContent = 'La contraseña es requerida.'; errEl.classList.remove('hidden'); return; }
-  if (password && password !== confirm) { errEl.textContent = 'Las contraseñas no coinciden.'; errEl.classList.remove('hidden'); return; }
-
-  const btn = document.getElementById('btn-save-user');
-  btn.disabled = true;
-
-  try {
-    const body = { nombre, rol, password };
-    if (editUserId) {
-      await api(`/api/mantenimiento/users/${editUserId}`, { method: 'PUT', body: JSON.stringify(body) });
-      toast('Usuario actualizado', 'success');
-    } else {
-      await api('/api/mantenimiento/users', { method: 'POST', body: JSON.stringify(body) });
-      toast('Usuario creado', 'success');
-    }
-    closeUserModal();
-    loadUsers();
-  } catch (e) {
-    errEl.textContent = e.message;
-    errEl.classList.remove('hidden');
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function deleteUser(id, nombre) {
-  if (!confirm(`¿Eliminar al usuario "${nombre}"? Esta acción no se puede deshacer.`)) return;
-  try {
-    await api(`/api/mantenimiento/users/${id}`, { method: 'DELETE' });
-    toast('Usuario eliminado', 'success');
-    loadUsers();
-  } catch (e) {
-    toast(e.message, 'error');
-  }
+  loadManttos();
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -667,15 +190,14 @@ async function seleccionarHer(idRegistro) {
   if (!row) return;
   herSeleccionado = row;
 
-  // Calcular siguiente repetición
-  const params = new URLSearchParams({
+  // Obtener siguiente repetición del backend (evita NaN y es más rápido)
+  const repParams = new URLSearchParams({
     tipo: row.Tipo, cod: row.CodMolde, version: row.Version, pieza: row.Pieza
   });
-  let nextRep = '...';
+  let nextRep = 1;
   try {
-    const manttos = await api(`/api/mantenimiento/manttos?${params}`);
-    const maxRep  = manttos.reduce((m, x) => Math.max(m, x.Repeticion || 0), 0);
-    nextRep = maxRep + 1;
+    const repData = await api(`/api/mantenimiento/manttos/next-rep?${repParams}`);
+    nextRep = repData.next_rep ?? 1;
   } catch { nextRep = 1; }
 
   herSeleccionado._nextRep = nextRep;
@@ -704,9 +226,9 @@ function closeConfirmar() {
 async function crearMantto() {
   if (!herSeleccionado) return;
   const btn = document.getElementById('btn-aceptar-mantto');
+  const btnOrigHtml = btn.innerHTML;
   btn.disabled = true; btn.textContent = 'Creando...';
 
-  // Guardamos referencia antes de cerrar el modal (closeConfirmar nullea herSeleccionado)
   const her = herSeleccionado;
 
   try {
@@ -715,20 +237,24 @@ async function crearMantto() {
       body: JSON.stringify({
         tipo:        her.Tipo,
         cod:         String(her.CodMolde),
-        version:     her.Version,
-        pieza:       her.Pieza,
+        version:     String(her.Version || '000'),
+        pieza:       String(her.Pieza   || '000'),
         adicionales: her.Adicionales || her.Lote || '',
       }),
     });
+
+    if (!res.id) throw new Error('El servidor no devolvió ID del mantenimiento');
+
     manttoActivoId = res.id;
     document.getElementById('modal-confirmar-mantto').classList.add('hidden');
     herSeleccionado = her;
-    herSeleccionado._nextRep = res.repeticion; // viene del backend, nunca NaN
+    herSeleccionado._nextRep = res.repeticion;
     await abrirFormMantto();
   } catch (e) {
-    toast(e.message, 'error');
+    toast(e.message || 'Error al crear el mantenimiento', 'error');
+  } finally {
     btn.disabled = false;
-    btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Aceptar — Crear Mantenimiento`;
+    btn.innerHTML = btnOrigHtml;
   }
 }
 
@@ -796,7 +322,7 @@ async function resumeMantto(id) {
       window._step2Data = m;
       loadStep2();
       // También precargar imagen para paso 1 si vuelve
-      api(`/api/mantenimiento/imagenes/buscar?tipo=${m.Tipo}&cod=${m.CodHer}&version=${m.Version}&pieza=${m.Pieza}`)
+      api(`/api/mantenimiento/imagenes/buscar?tipo=${m.Tipo}&cod=${m.CodHer}&version=${normalizarCodImg(m.Version)}&pieza=${normalizarCodImg(m.Pieza)}`)
         .then(img => { imgConfig = img; }).catch(() => {});
     } else if (startStep === 3) {
       window._step2Data = m;
@@ -833,6 +359,8 @@ function showStepContent(n) {
 
 async function nextStep() {
   if (currentStep === 1) {
+    const saved = await saveAllStep1();
+    if (!saved) return;
     currentStep = 2;
     renderStepBar(); showStepContent(2);
     loadStep2();
@@ -1107,6 +635,13 @@ async function finalizarMantto() {
 
 /* ── PASO 1: INGRESO HER ─────────────────────────────────── */
 
+// Normaliza version/pieza al formato de la tabla Imagenes (3 dígitos, fallback '000')
+function normalizarCodImg(val) {
+  if (!val || val === 'XXX' || val === 'XXXX') return '000';
+  const n = parseInt(val, 10);
+  return isNaN(n) ? '000' : String(n).padStart(3, '0');
+}
+
 async function loadStep1() {
   const her = herSeleccionado;
   if (!her) return;
@@ -1114,7 +649,10 @@ async function loadStep1() {
   // Buscar config de imagen (cantidad_puntos y puntos_esp_pista)
   try {
     const params = new URLSearchParams({
-      tipo: her.Tipo, cod: her.CodMolde, version: her.Version, pieza: her.Pieza
+      tipo:    her.Tipo,
+      cod:     her.CodMolde,
+      version: normalizarCodImg(her.Version),
+      pieza:   normalizarCodImg(her.Pieza),
     });
     const imgRow = await api(`/api/mantenimiento/imagenes/buscar?${params}`);
     imgConfig = imgRow;
@@ -1134,12 +672,32 @@ function renderStep1Image() {
   const info = document.getElementById('step1-img-info');
   const step1Src = resolveImgSrc(imgConfig?.IdStorage);
   if (step1Src) {
-    box.innerHTML = `<img src="${step1Src}" alt="Herramental" style="max-height:320px;object-fit:contain" />`;
+    box.innerHTML = `<img src="${step1Src}" alt="Herramental" />`;
     info.textContent = imgConfig.Nombre_Imagen || '';
   } else {
-    box.innerHTML = `<span class="no-img">Sin imagen registrada para este herramental</span>`;
+    box.innerHTML = `<span class="no-img" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">Sin imagen registrada para este herramental</span>`;
     info.textContent = '';
   }
+}
+
+function _measureRowHtml(prefix, idMed, clase) {
+  return `
+    <div class="measure-row" id="row-${prefix}-${idMed}">
+      <div class="measure-point" id="dot-${prefix}-${idMed}">${idMed}</div>
+      <input class="measure-input" type="number" step="0.01"
+        id="inp-${prefix}-${idMed}" placeholder="0.00"
+        oninput="onMeasureChange('${prefix}', ${idMed})" />
+      <button class="measure-action-btn" id="btn-${prefix}-${idMed}"
+        title="Guardar" onclick="saveSingleMeasure('${prefix}', ${idMed}, '${clase}')">
+        <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <svg class="icon-pencil" width="15" height="15" viewBox="0 0 24 24" fill="none" style="display:none">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>`;
 }
 
 function renderAjusteInputs() {
@@ -1155,20 +713,9 @@ function renderAjusteInputs() {
     </div>`;
     return;
   }
-
   let html = '';
   for (let i = 1; i <= total; i++) {
-    html += `
-      <div class="measure-row" id="row-ajuste-${i}">
-        <div class="measure-point" id="dot-ajuste-${i}">${i}</div>
-        <input class="measure-input" type="number" step="0.01"
-          id="inp-ajuste-${i}" placeholder="0.00"
-          oninput="onMeasureInput('MedidaTolerancia_Mantenimiento', ${i}, this)" />
-        <svg class="measure-save-icon" id="icon-ajuste-${i}" width="16" height="16"
-          viewBox="0 0 24 24" fill="none">
-          <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>`;
+    html += _measureRowHtml('ajuste', i, 'MedidaTolerancia_Mantenimiento');
   }
   container.innerHTML = html;
 }
@@ -1185,20 +732,9 @@ function renderEspesorInputs() {
       No hay puntos de espesor de pista configurados para este herramental.</p>`;
     return;
   }
-
   let html = '';
   puntos.forEach(p => {
-    html += `
-      <div class="measure-row" id="row-espesor-${p}">
-        <div class="measure-point" id="dot-espesor-${p}">${p}</div>
-        <input class="measure-input" type="number" step="0.01"
-          id="inp-espesor-${p}" placeholder="0.00"
-          oninput="onMeasureInput('EspesorPista_Mantenimiento', ${p}, this)" />
-        <svg class="measure-save-icon" id="icon-espesor-${p}" width="16" height="16"
-          viewBox="0 0 24 24" fill="none">
-          <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>`;
+    html += _measureRowHtml('espesor', p, 'EspesorPista_Mantenimiento');
   });
   container.innerHTML = html;
 }
@@ -1208,70 +744,138 @@ async function loadExistingDetails() {
   try {
     const mantto = await api(`/api/mantenimiento/manttos/${manttoActivoId}`);
     const byClase = mantto.details_by_clase || {};
-
     const ajuste  = byClase['MedidaTolerancia_Mantenimiento'] || [];
     const espesor = byClase['EspesorPista_Mantenimiento'] || [];
-
-    ajuste.forEach(d  => markSaved('ajuste',  d.IdMed, d.Value));
-    espesor.forEach(d => markSaved('espesor', d.IdMed, d.Value));
+    ajuste.forEach(d  => setFieldSaved('ajuste',  d.IdMed, d.Value));
+    espesor.forEach(d => setFieldSaved('espesor', d.IdMed, d.Value));
   } catch { /* sin datos existentes */ }
 }
 
-function markSaved(prefix, idMed, value) {
-  const inp  = document.getElementById(`inp-${prefix}-${idMed}`);
-  const dot  = document.getElementById(`dot-${prefix}-${idMed}`);
-  const icon = document.getElementById(`icon-${prefix}-${idMed}`);
+// Cuando escribe: habilita el campo y muestra chulo (pendiente de guardar)
+function onMeasureChange(prefix, idMed) {
+  const inp = document.getElementById(`inp-${prefix}-${idMed}`);
+  const dot = document.getElementById(`dot-${prefix}-${idMed}`);
+  const btn = document.getElementById(`btn-${prefix}-${idMed}`);
+  inp.classList.remove('saved');
+  if (dot) dot.classList.remove('saved');
+  if (btn) {
+    btn.classList.remove('btn-edit-mode');
+    btn.querySelector('.icon-check').style.display = '';
+    btn.querySelector('.icon-pencil').style.display = 'none';
+    btn.title = 'Guardar';
+  }
+}
+
+// Estado visual: guardado (muestra lápiz, input readonly)
+function setFieldSaved(prefix, idMed, value) {
+  const inp = document.getElementById(`inp-${prefix}-${idMed}`);
+  const dot = document.getElementById(`dot-${prefix}-${idMed}`);
+  const btn = document.getElementById(`btn-${prefix}-${idMed}`);
   if (!inp) return;
   if (value !== null && value !== undefined) inp.value = value;
   inp.classList.add('saved');
-  if (dot)  dot.classList.add('saved');
-  if (icon) icon.classList.add('active');
+  inp.readOnly = true;
+  if (dot) dot.classList.add('saved');
+  if (btn) {
+    btn.classList.add('btn-edit-mode');
+    btn.querySelector('.icon-check').style.display = 'none';
+    btn.querySelector('.icon-pencil').style.display = '';
+    btn.title = 'Editar';
+    btn.onclick = () => setFieldEditing(prefix, idMed);
+  }
 }
 
-const _debounceMap = {};
-function onMeasureInput(clase, idMed, inputEl) {
-  const prefix = clase === 'MedidaTolerancia_Mantenimiento' ? 'ajuste' : 'espesor';
-  const key = `${clase}-${idMed}`;
-  clearTimeout(_debounceMap[key]);
-  _debounceMap[key] = setTimeout(() => saveMeasure(clase, idMed, inputEl, prefix), 600);
-  // Quitar estado guardado mientras edita
-  inputEl.classList.remove('saved');
-  const dot  = document.getElementById(`dot-${prefix}-${idMed}`);
-  const icon = document.getElementById(`icon-${prefix}-${idMed}`);
-  if (dot)  dot.classList.remove('saved');
-  if (icon) icon.classList.remove('active');
+// Vuelve el campo a modo edición (click en lápiz)
+function setFieldEditing(prefix, idMed) {
+  const clase = prefix === 'ajuste' ? 'MedidaTolerancia_Mantenimiento' : 'EspesorPista_Mantenimiento';
+  const inp = document.getElementById(`inp-${prefix}-${idMed}`);
+  const btn = document.getElementById(`btn-${prefix}-${idMed}`);
+  if (!inp) return;
+  inp.readOnly = false;
+  inp.focus();
+  inp.select();
+  inp.classList.remove('saved');
+  if (btn) {
+    btn.classList.remove('btn-edit-mode');
+    btn.querySelector('.icon-check').style.display = '';
+    btn.querySelector('.icon-pencil').style.display = 'none';
+    btn.title = 'Guardar';
+    btn.onclick = () => saveSingleMeasure(prefix, idMed, clase);
+  }
 }
 
-async function saveMeasure(clase, idMed, inputEl, prefix) {
+// Guarda UN campo individualmente
+async function saveSingleMeasure(prefix, idMed, clase) {
   if (!manttoActivoId) return;
-  const value = parseFloat(inputEl.value);
-  if (isNaN(value)) return;
+  const inp = document.getElementById(`inp-${prefix}-${idMed}`);
+  const value = parseFloat(inp.value);
+  if (isNaN(value)) { toast('Ingresa un valor numérico', 'error'); return; }
 
-  const label = document.getElementById('step-auto-save-label');
-  if (label) label.textContent = 'Guardando...';
-
+  const btn = document.getElementById(`btn-${prefix}-${idMed}`);
+  if (btn) btn.disabled = true;
   try {
     await api(`/api/mantenimiento/manttos/${manttoActivoId}/detail`, {
       method: 'PUT',
       body: JSON.stringify({ id_med: idMed, clase, value }),
     });
-    markSaved(prefix, idMed, value);
-    if (label) label.textContent = `✓ Guardado automáticamente`;
-    setTimeout(() => { if (label) label.textContent = ''; }, 2000);
-  } catch (e) {
-    if (label) label.textContent = 'Error al guardar';
+    setFieldSaved(prefix, idMed, null);
+  } catch {
+    toast('Error al guardar el campo', 'error');
+  } finally {
+    if (btn) btn.disabled = false;
   }
+}
+
+// Guarda en batch los campos que NO estén ya guardados (readOnly)
+async function saveStep1Batch(clase) {
+  if (!manttoActivoId) return true;
+  const prefix = clase === 'MedidaTolerancia_Mantenimiento' ? 'ajuste' : 'espesor';
+  const inputs = [...document.querySelectorAll(`[id^="inp-${prefix}-"]`)]
+    .filter(inp => !inp.readOnly);  // solo los no guardados
+
+  if (!inputs.length) return true;
+
+  const items = inputs.map(inp => ({
+    id_med: parseInt(inp.id.replace(`inp-${prefix}-`, ''), 10),
+    clase,
+    value:  parseFloat(inp.value) || 0,
+  }));
+
+  try {
+    await api(`/api/mantenimiento/manttos/${manttoActivoId}/details/batch`, {
+      method: 'PUT',
+      body: JSON.stringify({ items }),
+    });
+    items.forEach(item => setFieldSaved(prefix, item.id_med, null));
+    return true;
+  } catch {
+    toast('Error al guardar. Intenta de nuevo.', 'error');
+    return false;
+  }
+}
+
+// Guarda AMBAS clases — llamado desde Siguiente paso 1
+async function saveAllStep1() {
+  const label = document.getElementById('step-auto-save-label');
+  if (label) label.textContent = 'Guardando...';
+  const ok1 = await saveStep1Batch('MedidaTolerancia_Mantenimiento');
+  const ok2 = await saveStep1Batch('EspesorPista_Mantenimiento');
+  if (label) {
+    label.textContent = (ok1 && ok2) ? '✓ Todo guardado' : 'Error al guardar';
+    setTimeout(() => { if (label) label.textContent = ''; }, 2500);
+  }
+  return ok1 && ok2;
 }
 
 /* ══════════════════════════════════════════════════════════
    MÓDULO MANTENIMIENTOS (ROBOT)
 ══════════════════════════════════════════════════════════ */
 
-let allManttos = [];
+let allManttos  = [];
+let manttoOffset = 0;
+let manttoTotal  = 0;
 
 function bindRobot() {
-  document.getElementById('btn-robot').addEventListener('click', openManttoScreen);
-  document.getElementById('btn-back-mantto').addEventListener('click', closeManttoScreen);
   document.getElementById('btn-back-detail').addEventListener('click', showManttoList);
   document.getElementById('btn-mantto-add').addEventListener('click', openBuscarHer);
 
@@ -1280,6 +884,11 @@ function bindRobot() {
   document.getElementById('mantto-search').addEventListener('input', () => {
     clearTimeout(deb); deb = setTimeout(loadManttos, 350);
   });
+
+  // Modal cancelar mantto
+  document.getElementById('btn-close-cancel-mantto').addEventListener('click', closeCancelMantto);
+  document.getElementById('btn-cancel-cancel-mantto').addEventListener('click', closeCancelMantto);
+  document.getElementById('btn-confirm-cancel-mantto').addEventListener('click', confirmCancelMantto);
 
   // Pills de estatus
   document.querySelectorAll('#mantto-estatus-pills .pill').forEach(p => {
@@ -1292,17 +901,8 @@ function bindRobot() {
 }
 
 function openManttoScreen() {
-  document.getElementById('app-screen').classList.add('hidden');
-  document.getElementById('mantto-screen').classList.remove('hidden');
-  document.getElementById('btn-robot').classList.add('active');
   showManttoList();
   loadManttos();
-}
-
-function closeManttoScreen() {
-  document.getElementById('mantto-screen').classList.add('hidden');
-  document.getElementById('app-screen').classList.remove('hidden');
-  document.getElementById('btn-robot').classList.remove('active');
 }
 
 function showManttoList() {
@@ -1316,34 +916,68 @@ function showManttoDetail() {
 }
 
 async function loadManttos() {
-  const tbody  = document.getElementById('mantto-tbody');
-  const search = document.getElementById('mantto-search').value.trim();
-  const estatus = document.querySelector('#mantto-estatus-pills .pill.active')?.dataset.estatus || '';
-
+  manttoOffset = 0;
+  allManttos   = [];
+  const tbody = document.getElementById('mantto-tbody');
   tbody.innerHTML = `<tr class="row-loading"><td colspan="10"><span class="spinner"></span></td></tr>`;
-
+  updateManttoLoadMore(false, true);
   try {
-    const params = new URLSearchParams();
-    if (search)  params.set('search', search);
-    if (estatus) params.set('estatus', estatus);
-    allManttos = await api(`/api/mantenimiento/manttos?${params}`);
-    renderManttos();
+    const res = await fetchManttoPage(0);
+    manttoOffset = res.data.length;
+    manttoTotal  = res.total;
+    allManttos   = res.data;
+    renderManttos(false);
+    updateManttoFooter(res);
   } catch (e) {
     tbody.innerHTML = `<tr class="row-loading"><td colspan="10">Error: ${e.message}</td></tr>`;
   }
 }
 
-function renderManttos() {
-  const tbody = document.getElementById('mantto-tbody');
-  document.getElementById('mantto-count-label').textContent =
-    `${allManttos.length} registro${allManttos.length !== 1 ? 's' : ''}`;
-
-  if (!allManttos.length) {
-    tbody.innerHTML = `<tr class="row-loading"><td colspan="10">Sin registros</td></tr>`;
-    return;
+async function loadMoreManttos() {
+  updateManttoLoadMore(true, true);
+  try {
+    const res = await fetchManttoPage(manttoOffset);
+    manttoOffset += res.data.length;
+    allManttos = allManttos.concat(res.data);
+    appendManttoRows(res.data);
+    updateManttoFooter(res);
+  } catch (e) {
+    toast(e.message, 'error');
+    updateManttoLoadMore(false, true);
   }
+}
 
-  tbody.innerHTML = allManttos.map(m => `
+async function fetchManttoPage(offset) {
+  const search  = document.getElementById('mantto-search').value.trim();
+  const estatus = document.querySelector('#mantto-estatus-pills .pill.active')?.dataset.estatus || '';
+  const params  = new URLSearchParams({ offset });
+  if (search)  params.set('search', search);
+  if (estatus) params.set('estatus', estatus);
+  return api(`/api/mantenimiento/manttos?${params}`);
+}
+
+function updateManttoFooter(res) {
+  const label = document.getElementById('mantto-count-label');
+  if (!label) return;
+  const showing = Math.min(manttoOffset, res.total);
+  label.textContent = res.has_more
+    ? `Mostrando ${showing.toLocaleString()} de ${res.total.toLocaleString()}`
+    : `${res.total.toLocaleString()} registro${res.total !== 1 ? 's' : ''}`;
+  updateManttoLoadMore(false, res.has_more);
+}
+
+function updateManttoLoadMore(loading, visible) {
+  const btn = document.getElementById('btn-mantto-load-more');
+  if (!btn) return;
+  btn.style.display = visible ? '' : 'none';
+  btn.disabled = loading;
+  btn.innerHTML = loading
+    ? '<span class="spinner"></span> Cargando...'
+    : 'Cargar más registros';
+}
+
+function manttoRowHtml(m) {
+  return `
     <tr>
       <td style="white-space:nowrap">${escapeHtml(m.FechaCreateMant || '--')}</td>
       <td>${escapeHtml(m.CreadoPor || '--')}</td>
@@ -1360,14 +994,86 @@ function renderManttos() {
           <button class="btn-edit" title="Continuar llenando" style="color:var(--primary)"
             onclick="resumeMantto(${m.IdManten})">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>
+          </button>
+          <button class="btn-edit" title="Cancelar mantenimiento" style="color:var(--danger)"
+            onclick="handleCancelMantto(${m.IdManten},'${escapeHtml(m.Tipo)}${escapeHtml(m.CodHer)} Rep.${escapeHtml(String(m.Repeticion))}')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="2"/>
+              <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2"/>
+              <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
           </button>` : ''}
           <button class="btn-edit" title="Ver detalle" onclick="openManttoDetail(${m.IdManten})">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
           </button>
         </div>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+}
+
+function appendManttoRows(rows) {
+  const frag = document.createDocumentFragment();
+  const tmp  = document.createElement('tbody');
+  tmp.innerHTML = rows.map(manttoRowHtml).join('');
+  while (tmp.firstChild) frag.appendChild(tmp.firstChild);
+  document.getElementById('mantto-tbody').appendChild(frag);
+}
+
+function renderManttos(append) {
+  const tbody = document.getElementById('mantto-tbody');
+  if (!allManttos.length) {
+    tbody.innerHTML = `<tr class="row-loading"><td colspan="10">Sin registros</td></tr>`;
+    return;
+  }
+  if (append) { appendManttoRows(allManttos); return; }
+  tbody.innerHTML = allManttos.map(manttoRowHtml).join('');
+}
+
+/* ── CANCELAR MANTTO ─────────────────────────────────────── */
+let cancelManttoTarget = null;
+
+function handleCancelMantto(id, label) {
+  cancelManttoTarget = id;
+  document.getElementById('cancel-mantto-info').innerHTML =
+    `<strong>Mantenimiento a cancelar:</strong> ${escapeHtml(label)}`;
+  document.getElementById('cancel-mantto-motivo').value = '';
+  document.getElementById('cancel-mantto-error').classList.add('hidden');
+  document.getElementById('modal-cancel-mantto').classList.remove('hidden');
+  setTimeout(() => document.getElementById('cancel-mantto-motivo').focus(), 50);
+}
+
+function closeCancelMantto() {
+  document.getElementById('modal-cancel-mantto').classList.add('hidden');
+  cancelManttoTarget = null;
+}
+
+async function confirmCancelMantto() {
+  if (!cancelManttoTarget) return;
+  const motivo = document.getElementById('cancel-mantto-motivo').value.trim();
+  const errEl  = document.getElementById('cancel-mantto-error');
+  if (!motivo) {
+    errEl.textContent = 'El motivo es obligatorio.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  const btn = document.getElementById('btn-confirm-cancel-mantto');
+  btn.disabled = true;
+  btn.textContent = 'Cancelando...';
+  try {
+    await api(`/api/mantenimiento/manttos/${cancelManttoTarget}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ motivo }),
+    });
+    closeCancelMantto();
+    toast('Mantenimiento cancelado', 'success');
+    loadManttos();
+  } catch (e) {
+    errEl.textContent = e.message || 'Error al cancelar';
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Cancelar mantenimiento';
+  }
 }
 
 async function openManttoDetail(id) {

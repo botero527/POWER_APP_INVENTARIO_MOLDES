@@ -17,12 +17,16 @@ def _fmt(rows, keys):
     return rows
 
 
-def get_all(search=None, estatus=None, is_admin=False):
+PAGE_SIZE = 100
+
+
+def get_all(search=None, estatus=None, is_admin=False, offset=0, limit=None):
     wheres, params = [], []
+    has_filters = bool(search or estatus)
 
     if not is_admin:
         wheres.append("Estatus = 'Finalizado'")
-        estatus = None  # ignorar filtro externo para no-admins (evita condición imposible)
+        estatus = None
 
     if search:
         wheres.append("(CAST(CodHer AS VARCHAR) LIKE ? OR CreadoPor LIKE ? OR Adicionales LIKE ?)")
@@ -33,11 +37,24 @@ def get_all(search=None, estatus=None, is_admin=False):
         params.append(estatus)
 
     where_sql = f"WHERE {' AND '.join(wheres)}" if wheres else ''
-    rows = query(
-        f"SELECT * FROM dbo.[{HEAD}] {where_sql} ORDER BY FechaCreateMant DESC",
-        params
-    )
-    return _fmt(rows, ['FechaCreateMant', 'FechaReleaseMant'])
+
+    total_rows = query(f"SELECT COUNT(*) AS n FROM dbo.[{HEAD}] {where_sql}", params)
+    total = total_rows[0]['n'] if total_rows else 0
+
+    if has_filters or limit is None:
+        rows = query(
+            f"SELECT * FROM dbo.[{HEAD}] {where_sql} ORDER BY FechaCreateMant DESC",
+            params
+        )
+    else:
+        rows = query(
+            f"SELECT * FROM dbo.[{HEAD}] {where_sql} "
+            f"ORDER BY FechaCreateMant DESC "
+            f"OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
+            params + [offset, limit]
+        )
+
+    return _fmt(rows, ['FechaCreateMant', 'FechaReleaseMant']), total, has_filters
 
 
 def get_by_id(id_mant):
@@ -63,6 +80,16 @@ def get_by_id(id_mant):
     head['details_by_clase'] = by_clase
     head['clase_labels'] = CLASE_LABELS
     return head
+
+
+def next_repeticion(tipo, cod, version, pieza):
+    """Retorna el siguiente número de repetición para un herramental."""
+    rows = query(
+        f"SELECT ISNULL(MAX(Repeticion), 0) + 1 AS next_rep FROM dbo.[{HEAD}] "
+        f"WHERE Tipo=? AND CodHer=? AND Version=? AND Pieza=?",
+        [tipo, cod, version, pieza]
+    )
+    return rows[0]['next_rep'] if rows else 1
 
 
 def create(tipo, cod, version, pieza, creado_por, tipo_mant='', adicionales=''):
@@ -120,9 +147,51 @@ def upsert_detail(id_mant, id_med, clase, value, matricero):
         )
 
 
+def upsert_details_batch(id_mant, items, matricero):
+    """Guarda una lista de {id_med, clase, value} en una sola transacción."""
+    existing = {
+        (r['IdMed'], r['Clase']): r['Id']
+        for r in query(
+            f"SELECT Id, IdMed, Clase FROM dbo.[{DET}] WHERE IdMant=?", [id_mant]
+        )
+    }
+    statements = []
+    for item in items:
+        id_med = item['id_med']
+        clase  = item['clase']
+        value  = item['value']
+        key    = (id_med, clase)
+        if key in existing:
+            statements.append((
+                f"UPDATE dbo.[{DET}] SET Value=?, FechaModif=GETDATE(), Matricero=? WHERE Id=?",
+                [value, matricero, existing[key]]
+            ))
+        else:
+            statements.append((
+                f"INSERT INTO dbo.[{DET}] (IdMant, IdMed, Clase, Value, FechaModif, Matricero) "
+                f"VALUES (?,?,?,?,GETDATE(),?)",
+                [id_mant, id_med, clase, value, matricero]
+            ))
+    if statements:
+        execute_multi(statements)
+
+
 def delete(id_mant):
     """Borra detalles y cabecera en una sola transacción."""
     execute_multi([
         (f"DELETE FROM dbo.[{DET}] WHERE IdMant=?",    [id_mant]),
         (f"DELETE FROM dbo.[{HEAD}] WHERE IdManten=?", [id_mant]),
     ])
+
+
+def soft_cancel(id_mant, motivo, usuario):
+    """Cancela un mantenimiento Pendiente sin borrarlo físicamente."""
+    execute(
+        f"""UPDATE dbo.[{HEAD}] SET
+            Estatus = 'Cancelado',
+            MotivoCancelacion = ?,
+            CanceladoPor = ?,
+            FechaCancelacion = GETDATE()
+            WHERE IdManten = ? AND Estatus = 'Pendiente'""",
+        [motivo, usuario, id_mant]
+    )
