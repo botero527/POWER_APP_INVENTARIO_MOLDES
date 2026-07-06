@@ -1,10 +1,12 @@
 import socket
+import logging
 from functools import wraps
-from flask import Flask, render_template, session, redirect, url_for, request
+from flask import Flask, render_template, session, redirect, url_for, request, jsonify
 from backend.config import SECRET_KEY, DEBUG
 from backend.routes.consultar import bp as consultar_bp
 from backend.routes.mantenimiento import bp as mantenimiento_bp
 from backend.db import close_request_connection
+from backend.limiter import limiter
 
 app = Flask(
     __name__,
@@ -12,12 +14,23 @@ app = Flask(
     static_folder='frontend/static',
 )
 app.secret_key = SECRET_KEY
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = not DEBUG
+
+limiter.init_app(app)
 
 app.register_blueprint(consultar_bp)
 app.register_blueprint(mantenimiento_bp)
 
 # Cierra la conexión DB al final de cada request (una sola conexión por request)
 app.teardown_appcontext(close_request_connection)
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(e):
+    app.logger.exception('Error no manejado: %s', str(e))
+    return jsonify({'error': 'Error interno del servidor. Intentalo nuevamente.'}), 500
 
 
 @app.route('/')
@@ -51,6 +64,7 @@ def admin():
 
 
 @app.route('/admin/login', methods=['GET', 'POST'])
+@limiter.limit('10 per minute', methods=['POST'])
 def admin_login():
     from backend.models.usuarios import verify_login, get_usernames
     error = None
@@ -92,4 +106,11 @@ if __name__ == '__main__':
     local_ip = get_local_ip()
     print(f'\n  Local:   http://127.0.0.1:{port}')
     print(f'  Red LAN: http://{local_ip}:{port}  <-- comparte este link\n')
-    app.run(host='0.0.0.0', debug=DEBUG, port=port)
+    if DEBUG:
+        # Modo desarrollo: servidor single-thread de Flask
+        app.run(host='0.0.0.0', debug=True, port=port)
+    else:
+        # Modo produccion: Waitress con 8 threads para multiples usuarios simultaneos
+        from waitress import serve
+        print('  Servidor: Waitress (produccion, 8 threads)\n')
+        serve(app, host='0.0.0.0', port=port, threads=8)

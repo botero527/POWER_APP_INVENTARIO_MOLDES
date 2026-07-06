@@ -112,7 +112,7 @@ let imgConfig       = null;  // datos de Imagenes para el herramental
 function openBuscarHer() {
   herSeleccionado = null;
   document.getElementById('modal-buscar-her').classList.remove('hidden');
-  ['buscar-tipo','buscar-cod','buscar-version','buscar-pieza'].forEach(id => {
+  ['buscar-tipo','buscar-cod','buscar-version','buscar-pieza','buscar-repeticion'].forEach(id => {
     const el = document.getElementById(id);
     if (el.tagName === 'SELECT') el.value = '';
     else el.value = '';
@@ -124,13 +124,14 @@ function openBuscarHer() {
 
 function closeBuscarHer() {
   document.getElementById('modal-buscar-her').classList.add('hidden');
+  window._buscarRows = [];
 }
 
 function bindBuscarHer() {
   document.getElementById('btn-close-buscar').addEventListener('click', closeBuscarHer);
 
   let deb;
-  ['buscar-tipo','buscar-cod','buscar-version','buscar-pieza'].forEach(id => {
+  ['buscar-tipo','buscar-cod','buscar-version','buscar-pieza','buscar-repeticion'].forEach(id => {
     document.getElementById(id).addEventListener('input', () => {
       clearTimeout(deb); deb = setTimeout(buscarHeramentales, 350);
     });
@@ -158,29 +159,31 @@ function bindBuscarHer() {
 }
 
 async function buscarHeramentales() {
-  const tipo    = document.getElementById('buscar-tipo').value;
-  const cod     = document.getElementById('buscar-cod').value.trim();
-  const version = document.getElementById('buscar-version').value.trim();
-  const pieza   = document.getElementById('buscar-pieza').value.trim();
+  const tipo       = document.getElementById('buscar-tipo').value;
+  const cod        = document.getElementById('buscar-cod').value.trim();
+  const version    = document.getElementById('buscar-version').value.trim();
+  const pieza      = document.getElementById('buscar-pieza').value.trim();
+  const repeticion = document.getElementById('buscar-repeticion').value.trim();
 
-  if (!tipo && !cod && !version && !pieza) {
+  if (!tipo && !cod && !version && !pieza && !repeticion) {
     document.getElementById('buscar-tbody').innerHTML =
       `<tr class="row-loading"><td colspan="8">Escriba para buscar...</td></tr>`;
     return;
   }
 
   const tbody = document.getElementById('buscar-tbody');
-  tbody.innerHTML = `<tr class="row-loading"><td colspan="8"><span class="spinner"></span></td></tr>`;
+  tbody.innerHTML = `<tr class="row-loading"><td colspan="7"><span class="spinner"></span></td></tr>`;
 
-  const params = new URLSearchParams({ tipo, cod, version, pieza });
+  const params = new URLSearchParams({ tipo, cod, version, pieza, repeticion });
   try {
     const rows = await api(`/api/mantenimiento/inventario-search?${params}`);
     if (!rows.length) {
-      tbody.innerHTML = `<tr class="row-loading"><td colspan="8">Sin resultados</td></tr>`;
+      tbody.innerHTML = `<tr class="row-loading"><td colspan="7">Sin resultados</td></tr>`;
       return;
     }
-    tbody.innerHTML = rows.map(r => `
-      <tr>
+    window._buscarRows = rows;
+    tbody.innerHTML = rows.map((r, i) => `
+      <tr onclick="seleccionarHer(${i})" style="cursor:pointer">
         <td><span class="rol-tag" style="background:#e8f4f7;color:var(--primary-dk)">${escapeHtml(r.Tipo)}</span></td>
         <td style="font-weight:700">${escapeHtml(r.CodMolde)}</td>
         <td>${escapeHtml(r.Version)}</td>
@@ -188,24 +191,15 @@ async function buscarHeramentales() {
         <td>${escapeHtml(r.Vehiculo || '--')}</td>
         <td style="text-align:center">${escapeHtml(r.Repeticion)}</td>
         <td>${escapeHtml(r.Adicionales || r.Lote || '--')}</td>
-        <td>
-          <button class="btn-edit" style="color:var(--primary)" title="Seleccionar"
-            onclick="seleccionarHer(${r.IdRegistro})">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-        </td>
       </tr>
     `).join('');
-    window._buscarRows = rows;
   } catch (e) {
-    tbody.innerHTML = `<tr class="row-loading"><td colspan="8">Error: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr class="row-loading"><td colspan="7">Error: ${e.message}</td></tr>`;
   }
 }
 
-async function seleccionarHer(idRegistro) {
-  const row = (window._buscarRows || []).find(r => r.IdRegistro === idRegistro);
+async function seleccionarHer(idx) {
+  const row = window._buscarRows && window._buscarRows[idx];
   if (!row) return;
   herSeleccionado = row;
   herSeleccionado._nextRep = row.Repeticion ?? '--';
@@ -293,8 +287,21 @@ function closeFormMantto() {
   document.getElementById('modal-form-mantto').classList.add('hidden');
   manttoActivoId = null; imgConfig = null; herSeleccionado = null;
   recibeUsername = null; window._step2Data = null;
+  currentStep = 1;
   const finBtn = document.getElementById('btn-confirmar-finalizar');
   if (finBtn) { finBtn.disabled = true; finBtn.classList.remove('pulse-once'); }
+  // Resetear botón quien recibe
+  const recibeBtn = document.getElementById('btn-set-recibe');
+  if (recibeBtn) {
+    recibeBtn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="8" x2="18" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="15" y1="11" x2="21" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Ingresar quien recibe`;
+    recibeBtn.style.color = '';
+    recibeBtn.style.borderColor = '';
+  }
+  // Resetear panel izquierdo quien recibe
+  const confirmedEl = document.getElementById('step3-recibe-confirmed');
+  const pendingEl   = document.getElementById('step3-recibe-pending');
+  if (confirmedEl) confirmedEl.classList.add('hidden');
+  if (pendingEl)   pendingEl.classList.remove('hidden');
   loadManttos();
 }
 
@@ -350,12 +357,15 @@ async function resumeMantto(id) {
 function renderStepBar() {
   const nextBtn    = document.getElementById('btn-step-next');
   const finalizBtn = document.getElementById('btn-confirmar-finalizar');
+  const recibeBtn  = document.getElementById('btn-set-recibe');
   if (currentStep === 3) {
-    nextBtn.classList.add('hidden');
-    finalizBtn.classList.remove('hidden');
+    if (nextBtn) nextBtn.classList.add('hidden');
+    if (finalizBtn) finalizBtn.classList.remove('hidden');
+    if (recibeBtn) recibeBtn.classList.remove('hidden');
   } else {
-    nextBtn.classList.remove('hidden');
-    finalizBtn.classList.add('hidden');
+    if (nextBtn) nextBtn.classList.remove('hidden');
+    if (finalizBtn) finalizBtn.classList.add('hidden');
+    if (recibeBtn) recibeBtn.classList.add('hidden');
   }
 
   document.querySelectorAll('.step').forEach(s => {
@@ -368,7 +378,7 @@ function renderStepBar() {
     l.classList.toggle('done', i + 1 < currentStep);
   });
   document.getElementById('btn-step-prev').classList.toggle('hidden', currentStep === 1);
-  nextBtn.innerHTML = `Siguiente <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="9,18 15,12 9,6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+  if (nextBtn) nextBtn.innerHTML = `Siguiente <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="9,18 15,12 9,6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 }
 
 function showStepContent(n) {
@@ -435,7 +445,11 @@ function _step2AutoSave() {
 async function loadStep2() {
   // Cargar opciones dinamicas primero para que los selects tengan opciones
   // antes de restaurar los valores guardados
-  await loadOpcionesDynamic();
+  try {
+    await loadOpcionesDynamic();
+  } catch {
+    return; // el toast ya se mostro en loadOpcionesDynamic
+  }
 
   // Restaurar valores guardados si los hay
   if (window._step2Data) {
@@ -456,6 +470,7 @@ async function loadStep2() {
 }
 
 async function saveStep2() {
+  clearTimeout(window._step2Deb);
   const tipo   = document.getElementById('mant-tipo-mant').value;
   const estado = document.getElementById('mant-estado-postes').value;
   const patron = document.getElementById('mant-patron-ref').value;
@@ -518,35 +533,54 @@ function buildResumenHTML(m) {
   const img = m._img || null;
   const imgSrc = img ? resolveImgSrc(img.IdStorage) : null;
 
-  const claseLabel = {
-    'MedidaTolerancia_Mantenimiento': 'Mediciones de Tolerancia',
-    'EspesorPista_Mantenimiento':     'Espesor de Pista',
-  };
-  let medsSections = '';
-  for (const [clase, items] of Object.entries(m.details_by_clase || {})) {
-    const label   = claseLabel[clase] || clase.replace(/_/g, ' ');
+  const byClase = m.details_by_clase || {};
+  const espesorItems    = byClase['EspesorPista_Mantenimiento'] || [];
+  const toleranciaItems = byClase['MedidaTolerancia_Mantenimiento'] || [];
+
+  function buildTable(items) {
     const sorted  = [...items].sort((a, b) => a.IdMed - b.IdMed);
     const headers = sorted.map(d => `<th>${d.IdMed}</th>`).join('');
     const vals    = sorted.map(d => `<td>${d.Value ?? '--'}</td>`).join('');
-    medsSections += `
-      <div class="meds-section" style="margin-bottom:16px">
-        <div class="meds-section-title">${label}</div>
-        <div class="meds-table-wrap">
-          <table class="meds-table">
-            <thead><tr><th>Punto</th>${headers}</tr></thead>
-            <tbody><tr><td>Valor</td>${vals}</tr></tbody>
-          </table>
-        </div>
-      </div>`;
+    return `<table class="meds-table"><thead><tr><th>Punto</th>${headers}</tr></thead><tbody><tr><td>Valor</td>${vals}</tr></tbody></table>`;
   }
 
+  // Fila superior: imagen izquierda + espesor derecha
+  const imgBlock = imgSrc ? `
+    <div class="resumen-img-wrap" onclick="openImgLightbox('${imgSrc}')" title="Click para ampliar">
+      <img src="${imgSrc}" class="resumen-img" />
+      <div class="resumen-img-zoom"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg></div>
+    </div>` : `
+    <div class="resumen-img-wrap resumen-img-empty">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+      <span style="font-size:11px;color:var(--text-muted);margin-top:6px">Sin imagen</span>
+    </div>`;
+
+  const espesorBlock = espesorItems.length ? `
+    <div class="meds-section" style="flex:1;min-width:0">
+      <div class="meds-section-title">Espesor de Pista</div>
+      <div class="meds-table-wrap">${buildTable(espesorItems)}</div>
+    </div>` : '';
+
+  const toleranciaBlock = toleranciaItems.length ? `
+    <div class="meds-section" style="margin-top:14px">
+      <div class="meds-section-title">Mediciones de Tolerancia</div>
+      <div class="meds-table-wrap">${buildTable(toleranciaItems)}</div>
+    </div>` : '';
+
+  const noMeds = !espesorItems.length && !toleranciaItems.length
+    ? '<p style="color:var(--text-muted);font-size:13px;margin-top:8px">Sin mediciones registradas.</p>' : '';
+
   return `
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
       <h3 style="font-size:18px;font-weight:800;flex:1">Herramental a Liberar</h3>
       <span class="estatus-badge estatus-${m.Estatus}">${m.Estatus}</span>
     </div>
-    ${imgSrc ? `<div style="text-align:center;margin-bottom:16px"><img src="${imgSrc}" style="max-height:200px;object-fit:contain;border-radius:8px;border:1px solid var(--border)" /></div>` : ''}
-    ${medsSections || '<p style="color:var(--text-muted);font-size:13px">Sin mediciones registradas.</p>'}
+    <div class="resumen-top-row">
+      ${imgBlock}
+      ${espesorBlock}
+    </div>
+    ${toleranciaBlock}
+    ${noMeds}
     <div class="detail-card" style="margin-top:16px">
       <div class="detail-card-title">Detalle del Mantenimiento</div>
       <div class="detail-row"><span class="detail-label">Tipo mantenimiento</span><span class="detail-value">${escapeHtml(m.TipoMant || '--')}</span></div>
@@ -554,6 +588,20 @@ function buildResumenHTML(m) {
       <div class="detail-row"><span class="detail-label">Patrón de referencia</span><span class="detail-value">${escapeHtml(m.PatronReferencia || '--')}</span></div>
       <div class="detail-row"><span class="detail-label">Observaciones</span><span class="detail-value">${escapeHtml(m.Observaciones || 'No registra')}</span></div>
     </div>`;
+}
+
+function openImgLightbox(src) {
+  let ov = document.getElementById('img-lightbox-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'img-lightbox-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+    ov.innerHTML = '<img id="img-lightbox-img" style="max-width:90vw;max-height:90vh;object-fit:contain;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6)" />';
+    ov.addEventListener('click', () => ov.remove());
+    document.body.appendChild(ov);
+  }
+  document.getElementById('img-lightbox-img').src = src;
+  ov.style.display = 'flex';
 }
 
 function bindRecibeModal() {
@@ -628,15 +676,27 @@ async function confirmarRecibe() {
       method: 'PUT', body: JSON.stringify({ Recibe: username }),
     });
 
-    // Actualizar UI
-    document.getElementById('step3-recibe-wrap').innerHTML = `
-      <div class="step3-recibe-confirmed">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+    // Actualizar panel izquierdo
+    const confirmedEl = document.getElementById('step3-recibe-confirmed');
+    const pendingEl   = document.getElementById('step3-recibe-pending');
+    const nameEl      = document.getElementById('step3-recibe-name');
+    if (nameEl) nameEl.textContent = username;
+    if (confirmedEl) confirmedEl.classList.remove('hidden');
+    if (pendingEl)   pendingEl.classList.add('hidden');
+
+    // Cambiar botón del footer a "confirmado"
+    const recibeBtn = document.getElementById('btn-set-recibe');
+    if (recibeBtn) {
+      recibeBtn.innerHTML = `
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
           <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
           <polyline points="9 12 11 14 15 10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
         </svg>
-        ${username}
-      </div>`;
+        ${username}`;
+      recibeBtn.style.color = 'var(--success)';
+      recibeBtn.style.borderColor = 'var(--success)';
+    }
+
     closeRecibeModal();
     toast(`${username} confirmado como receptor`, 'success');
     // Habilitar botón confirmar y finalizar
@@ -862,11 +922,19 @@ function onMeasureChange(prefix, idMed) {
   const row = document.getElementById(`row-${prefix}-${idMed}`);
   const btn = document.getElementById(`btn-${prefix}-${idMed}`);
 
-  // Reemplazar coma por punto
-  if (inp.value.includes(',')) {
-    inp.value = inp.value.replace(',', '.');
+  // 1. Reemplazar coma por punto
+  let val = inp.value.replace(',', '.');
+  // 2. Quitar todo lo que no sea dígito o punto (guiones, letras, espacios, etc.)
+  val = val.replace(/[^0-9.]/g, '');
+  // 3. Solo permitir un punto decimal — si hay más, quitar los sobrantes
+  const parts = val.split('.');
+  if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+  // Actualizar el campo solo si cambió (evita mover el cursor innecesariamente)
+  if (inp.value !== val) {
+    inp.value = val;
+    inp.setSelectionRange(val.length, val.length);
   }
-  // Aplicar auto-decimal mientras escribe (solo si no tiene punto)
+  // 4. Aplicar auto-decimal mientras escribe (solo si no tiene punto aún)
   const raw = inp.value;
   if (raw && !raw.includes('.') && raw.length >= 2) {
     const converted = autoDecimal(raw);
@@ -1360,15 +1428,20 @@ function renderManttoDetail(m) {
 
 /* ── OPCIONES DINAMICAS (dropdowns desde BD) ───────────────── */
 async function loadOpcionesDynamic() {
-  if (window._opcionesCache) return;
+  const TTL = 5 * 60 * 1000; // 5 minutos
+  if (window._opcionesCache && window._opcionesCacheTime && (Date.now() - window._opcionesCacheTime < TTL)) return;
   try {
     const data = await api('/api/mantenimiento/opciones');
     window._opcionesCache = data;
+    window._opcionesCacheTime = Date.now();
     populateSelect('mant-tipo-mant',     (data['tipo_mant']     && data['tipo_mant'].options)     || []);
     populateSelect('mant-estado-postes', (data['estado_postes'] && data['estado_postes'].options) || []);
     populateSelect('mant-patron-ref',    (data['patron_ref']    && data['patron_ref'].options)    || []);
   } catch (e) {
+    // No setear cache para permitir reintentos
+    toast('Error cargando opciones del formulario. Verifica la conexion y recarga.', 'error');
     console.warn('No se pudieron cargar opciones dinamicas:', e.message);
+    throw e;
   }
 }
 

@@ -37,18 +37,12 @@ def get_all(search=None, estatus=None, offset=0, limit=None):
     total_rows = query(f"SELECT COUNT(*) AS n FROM dbo.[{HEAD}] {where_sql}", params)
     total = total_rows[0]['n'] if total_rows else 0
 
-    if has_filters or limit is None:
-        rows = query(
-            f"SELECT * FROM dbo.[{HEAD}] {where_sql} ORDER BY FechaCreateMant DESC",
-            params
-        )
-    else:
-        rows = query(
-            f"SELECT * FROM dbo.[{HEAD}] {where_sql} "
-            f"ORDER BY FechaCreateMant DESC "
-            f"OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
-            params + [offset, limit]
-        )
+    rows = query(
+        f"SELECT * FROM dbo.[{HEAD}] {where_sql} "
+        f"ORDER BY FechaCreateMant DESC "
+        f"OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
+        params + [offset, limit or PAGE_SIZE]
+    )
 
     return _fmt(rows, ['FechaCreateMant', 'FechaReleaseMant']), total, has_filters
 
@@ -155,9 +149,11 @@ def upsert_details_batch(id_mant, items, matricero):
     }
     statements = []
     for item in items:
-        id_med = item['id_med']
-        clase  = item['clase']
-        value  = item['value']
+        id_med = item.get('id_med')
+        clase  = item.get('clase', '')
+        value  = item.get('value')
+        if id_med is None:
+            continue
         key    = (id_med, clase)
         if key in existing:
             statements.append((

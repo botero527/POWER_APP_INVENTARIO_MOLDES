@@ -5,6 +5,7 @@ from flask import Blueprint, request, jsonify, session, current_app
 from werkzeug.utils import secure_filename
 from backend.models.imagenes import get_all, get_by_id, find_for_tool, create, update, delete, build_nombre
 from backend.models.usuarios import get_usernames, verify_login
+from backend.limiter import limiter
 
 bp = Blueprint('mantenimiento', __name__, url_prefix='/api/mantenimiento')
 
@@ -32,13 +33,16 @@ def login_required(f):
 
 @bp.route('/usuarios', methods=['GET'])
 def list_usuarios():
-    # Pública: necesaria para llenar el dropdown del login antes de autenticarse
-    return jsonify(get_usernames())
+    # Publica: necesaria para llenar el dropdown del login antes de autenticarse
+    # Solo devuelve UserName (no UserId ni Rol)
+    rows = get_usernames()
+    return jsonify([{'UserName': r['UserName']} for r in rows])
 
 
 @bp.route('/login', methods=['POST'])
+@limiter.limit('10 per minute')
 def login():
-    body = request.get_json()
+    body = request.get_json(silent=True) or {}
     user = verify_login(body.get('username', ''), body.get('password', ''))
     if user:
         session['mant_user_id'] = user['UserId']
@@ -161,13 +165,14 @@ def delete_imagen(id_img):
     if not is_admin():
         return jsonify({'error': 'Solo administradores'}), 403
 
-    # Eliminar blob de Azure antes de borrar el registro
     row = get_by_id(id_img)
+    # Borrar registro en BD primero; si falla, el blob queda huerfano (costo minimo)
+    delete(id_img)
+    # Solo borrar blob si el registro en BD se elimino exitosamente
     if row and row.get('IdStorage') and row['IdStorage'].startswith('https://'):
         from backend.blob import delete_image
         delete_image(row['IdStorage'])
 
-    delete(id_img)
     return jsonify({'ok': True})
 
 
@@ -176,6 +181,8 @@ def delete_imagen(id_img):
 @bp.route('/users', methods=['GET'])
 @login_required
 def list_users():
+    if not is_admin():
+        return jsonify({'error': 'Solo administradores'}), 403
     from backend.models.usuarios import get_all
     rows = get_all()
     for r in rows:
@@ -190,7 +197,7 @@ def list_users():
 def create_user():
     if not is_admin():
         return jsonify({'error': 'Solo administradores'}), 403
-    body = request.get_json()
+    body = request.get_json(silent=True) or {}
     nombre   = body.get('nombre', '').strip()
     rol      = body.get('rol', '').strip()
     password = body.get('password', '').strip()
@@ -206,7 +213,7 @@ def create_user():
 def update_user(user_id):
     if not is_admin():
         return jsonify({'error': 'Solo administradores'}), 403
-    body = request.get_json()
+    body = request.get_json(silent=True) or {}
     nombre   = body.get('nombre', '').strip()
     rol      = body.get('rol', '').strip()
     password = body.get('password', '').strip()
@@ -233,8 +240,9 @@ def delete_user(user_id):
 
 @bp.route('/verify-user', methods=['POST'])
 @login_required
+@limiter.limit('10 per minute')
 def verify_user():
-    body = request.get_json()
+    body = request.get_json(silent=True) or {}
     from backend.models.usuarios import verify_login
     user = verify_login(body.get('username', ''), body.get('password', ''))
     if user:
@@ -249,12 +257,13 @@ def verify_user():
 def inventario_search():
     from backend.models.inventario import get_all
     filters = {
-        'tipo':      request.args.get('tipo', '').strip() or None,
-        'cod_molde': request.args.get('cod', '').strip() or None,
-        'version':   request.args.get('version', '').strip() or None,
-        'pieza':     request.args.get('pieza', '').strip() or None,
+        'tipo':       request.args.get('tipo', '').strip() or None,
+        'cod_molde':  request.args.get('cod', '').strip() or None,
+        'version':    request.args.get('version', '').strip() or None,
+        'pieza':      request.args.get('pieza', '').strip() or None,
+        'repeticion': request.args.get('repeticion', '').strip() or None,
     }
-    rows, _, _ = get_all({k: v for k, v in filters.items() if v})
+    rows, _, _ = get_all({k: v for k, v in filters.items() if v}, limit=500)
     for r in rows:
         for k in ('FechaCreacion', 'FechaEdicion'):
             if r.get(k) and hasattr(r[k], 'strftime'):
@@ -270,7 +279,10 @@ def list_manttos():
     from backend.models.mantto import get_all, PAGE_SIZE
     search  = request.args.get('search', '').strip()
     estatus = request.args.get('estatus', '').strip()
-    offset  = int(request.args.get('offset', 0))
+    try:
+        offset = int(request.args.get('offset', 0))
+    except ValueError:
+        return jsonify({'error': 'El parametro offset debe ser un entero'}), 400
     rows, total, has_filters = get_all(
         search or None, estatus or None,
         offset=offset, limit=PAGE_SIZE
@@ -278,7 +290,7 @@ def list_manttos():
     return jsonify({
         'data':     rows,
         'total':    total,
-        'has_more': not has_filters and (offset + len(rows)) < total,
+        'has_more': (offset + len(rows)) < total,
         'offset':   offset,
     })
 
@@ -315,7 +327,7 @@ def get_mantto(id_mant):
 @bp.route('/manttos', methods=['POST'])
 @login_required
 def create_mantto():
-    body        = request.get_json()
+    body        = request.get_json(silent=True) or {}
     tipo        = str(body.get('tipo', '')).strip()
     cod         = str(body.get('cod', '')).strip()
     version     = str(body.get('version', '')).strip()
@@ -324,11 +336,15 @@ def create_mantto():
     adicionales = str(body.get('adicionales', '')).strip()
     creado_por  = session.get('mant_username', '')
     if not tipo or not cod:
-        return jsonify({'error': 'Tipo y código son requeridos'}), 400
+        return jsonify({'error': 'Tipo y codigo son requeridos'}), 400
+    if len(adicionales) > 500:
+        return jsonify({'error': 'Adicionales excede 500 caracteres'}), 400
     from backend.models.mantto import create, get_by_id
     new_id = create(tipo, cod, version, pieza, creado_por, tipo_mant, adicionales)
-    created = get_by_id(new_id) if new_id else {}
-    return jsonify({'ok': True, 'id': new_id, 'repeticion': created.get('Repeticion', '?')}), 201
+    if not new_id:
+        return jsonify({'error': 'No se pudo crear el mantenimiento. Intentalo nuevamente.'}), 500
+    created = get_by_id(new_id)
+    return jsonify({'ok': True, 'id': new_id, 'repeticion': created.get('Repeticion', '?') if created else '?'}), 201
 
 
 @bp.route('/manttos/<int:id_mant>', methods=['PUT'])
@@ -349,19 +365,18 @@ def update_mantto(id_mant):
         val = body.get(field)
         if val and isinstance(val, str) and len(val) > max_len:
             return jsonify({'error': f'{field} excede longitud máxima ({max_len})'}), 400
+    was_finalizado = m.get('Estatus') == 'Finalizado'
     update_head(id_mant, body)
-    if body.get('Estatus') == 'Finalizado':
+    if body.get('Estatus') == 'Finalizado' and not was_finalizado:
         from backend.models.inventario import increment_usos
-        m = get_by_id(id_mant)
-        if m:
-            increment_usos(m['Tipo'], m['CodHer'], m['Version'], m['Pieza'])
+        increment_usos(m['Tipo'], m['CodHer'], m['Version'], m['Pieza'])
     return jsonify({'ok': True})
 
 
 @bp.route('/manttos/<int:id_mant>/detail', methods=['PUT'])
 @login_required
 def upsert_mantto_detail(id_mant):
-    body      = request.get_json()
+    body      = request.get_json(silent=True) or {}
     id_med    = body.get('id_med')
     clase     = body.get('clase', '')
     value     = body.get('value')
@@ -428,7 +443,10 @@ def create_opcion():
     body       = request.get_json() or {}
     grupo      = body.get('grupo', '').strip()
     valor      = body.get('valor', '').strip()
-    orden      = int(body.get('orden', 0))
+    try:
+        orden = int(body.get('orden', 0))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'El campo orden debe ser un entero'}), 400
     if not grupo or not valor:
         return jsonify({'error': 'grupo y valor son requeridos'}), 400
     if grupo not in MAX_LENS:
@@ -448,7 +466,10 @@ def update_opcion(id_op):
     from backend.models.opciones import update, MAX_LENS
     body  = request.get_json() or {}
     valor = body.get('valor', '').strip()
-    orden = int(body.get('orden', 0))
+    try:
+        orden = int(body.get('orden', 0))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'El campo orden debe ser un entero'}), 400
     grupo = body.get('grupo', '').strip()
     if not valor:
         return jsonify({'error': 'valor es requerido'}), 400

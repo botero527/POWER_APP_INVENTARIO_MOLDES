@@ -31,6 +31,10 @@ def get_all(filters=None, offset=0, limit=None):
             conditions.append('Pieza LIKE ?')
             params.append(f"%{filters['pieza']}%")
             has_filters = True
+        if filters.get('repeticion'):
+            conditions.append('Repeticion = ?')
+            params.append(filters['repeticion'])
+            has_filters = True
 
     # Excluir registros eliminados (soft-delete). Activo IS NULL = filas previas a la migración
     conditions.append("(Activo IS NULL OR Activo = 1)")
@@ -41,17 +45,12 @@ def get_all(filters=None, offset=0, limit=None):
     count_rows = query(f"SELECT COUNT(*) AS n FROM dbo.[{TABLE}] {where}", params)
     total = count_rows[0]['n'] if count_rows else 0
 
-    # Sin filtros: paginación. Con filtros: trae todo
-    if has_filters or limit is None:
-        sql = f"SELECT * FROM dbo.[{TABLE}] {where} ORDER BY FechaCreacion DESC, IdRegistro DESC"
-        rows = query(sql, params)
-    else:
-        sql = (
-            f"SELECT * FROM dbo.[{TABLE}] {where} "
-            f"ORDER BY FechaCreacion DESC, IdRegistro DESC "
-            f"OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
-        )
-        rows = query(sql, params + [offset, limit])
+    sql = (
+        f"SELECT * FROM dbo.[{TABLE}] {where} "
+        f"ORDER BY FechaCreacion DESC, IdRegistro DESC "
+        f"OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
+    )
+    rows = query(sql, params + [offset, limit or PAGE_SIZE])
 
     return rows, total, has_filters
 

@@ -8,6 +8,10 @@ let editImgId     = null;
 let editUserId    = null;
 let allUsers      = [];
 
+let _loadImgInFlight      = false;
+let _loadUsersInFlight    = false;
+let _loadOpcionesInFlight = false;
+
 /* ── INIT ──────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
   bindAdminTabs();
@@ -45,6 +49,8 @@ function resolveImgSrc(idStorage) {
 
 /* ── IMAGE GRID ─────────────────────────────────────────────── */
 async function loadImgGrid() {
+  if (_loadImgInFlight) return;
+  _loadImgInFlight = true;
   const search = document.getElementById('img-search').value.trim();
   const grid = document.getElementById('img-grid');
   grid.innerHTML = `<div class="grid-loading"><span class="spinner"></span> Cargando...</div>`;
@@ -53,6 +59,8 @@ async function loadImgGrid() {
     renderImgGrid(rows);
   } catch (e) {
     grid.innerHTML = `<div class="grid-loading">Error: ${e.message}</div>`;
+  } finally {
+    _loadImgInFlight = false;
   }
 }
 
@@ -279,6 +287,8 @@ async function saveImg() {
 
 /* ── USUARIOS ───────────────────────────────────────────────── */
 async function loadUsers() {
+  if (_loadUsersInFlight) return;
+  _loadUsersInFlight = true;
   const tbody = document.getElementById('users-tbody');
   tbody.innerHTML = `<tr class="row-loading"><td colspan="5"><span class="spinner"></span></td></tr>`;
   try {
@@ -287,6 +297,8 @@ async function loadUsers() {
     renderUserStats();
   } catch (e) {
     tbody.innerHTML = `<tr class="row-loading"><td colspan="5">Error: ${e.message}</td></tr>`;
+  } finally {
+    _loadUsersInFlight = false;
   }
 }
 
@@ -872,16 +884,20 @@ let _opcionesData    = null;   // cache completo { grupo: {label, max_len, optio
 let _opcionesGrupoActivo = null;
 
 async function loadOpcionesTab() {
+  if (_loadOpcionesInFlight) return;
+  _loadOpcionesInFlight = true;
   const sidebar = document.getElementById('opc-sidebar');
   sidebar.innerHTML = `<div class="opc-placeholder"><span class="spinner"></span></div>`;
   try {
     _opcionesData = await api('/api/mantenimiento/opciones');
     renderGrupoList(_opcionesData);
-    // Seleccionar primer grupo automáticamente
+    // Seleccionar primer grupo automaticamente
     const grupos = Object.keys(_opcionesData);
     if (grupos.length) selectGrupo(grupos[0]);
   } catch (e) {
     sidebar.innerHTML = `<div class="opc-placeholder">Error: ${escapeHtml(e.message)}</div>`;
+  } finally {
+    _loadOpcionesInFlight = false;
   }
 }
 
