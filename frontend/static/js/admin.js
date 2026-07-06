@@ -29,6 +29,7 @@ function bindAdminTabs() {
       document.getElementById(`admintab-${btn.dataset.admintab}`).classList.add('active');
       if (btn.dataset.admintab === 'imagenes') loadImgGrid();
       if (btn.dataset.admintab === 'usuarios') loadUsers();
+      if (btn.dataset.admintab === 'opciones') loadOpcionesTab();
     });
   });
 }
@@ -864,4 +865,215 @@ async function saveForm() {
   } finally {
     btn.disabled = false;
   }
+}
+
+/* ── OPCIONES TAB ───────────────────────────────────────────── */
+let _opcionesData    = null;   // cache completo { grupo: {label, max_len, options} }
+let _opcionesGrupoActivo = null;
+
+async function loadOpcionesTab() {
+  const sidebar = document.getElementById('opc-sidebar');
+  sidebar.innerHTML = `<div class="opc-placeholder"><span class="spinner"></span></div>`;
+  try {
+    _opcionesData = await api('/api/mantenimiento/opciones');
+    renderGrupoList(_opcionesData);
+    // Seleccionar primer grupo automáticamente
+    const grupos = Object.keys(_opcionesData);
+    if (grupos.length) selectGrupo(grupos[0]);
+  } catch (e) {
+    sidebar.innerHTML = `<div class="opc-placeholder">Error: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderGrupoList(grupos) {
+  const sidebar = document.getElementById('opc-sidebar');
+  if (!Object.keys(grupos).length) {
+    sidebar.innerHTML = `<div class="opc-placeholder">Sin grupos</div>`;
+    return;
+  }
+  sidebar.innerHTML = Object.entries(grupos).map(([key, g]) => `
+    <div class="opc-sidebar-item ${key === _opcionesGrupoActivo ? 'active' : ''}"
+         onclick="selectGrupo('${escapeHtml(key)}')" data-grupo="${escapeHtml(key)}">
+      <span class="opc-sidebar-dot"></span>
+      ${escapeHtml(g.label)}
+    </div>`).join('');
+}
+
+async function selectGrupo(grupo) {
+  _opcionesGrupoActivo = grupo;
+  // Actualizar sidebar activo
+  document.querySelectorAll('.opc-sidebar-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.grupo === grupo);
+  });
+  // Recargar opciones frescas del servidor
+  try {
+    const opciones = await api(`/api/mantenimiento/opciones/${grupo}`);
+    if (_opcionesData && _opcionesData[grupo]) {
+      _opcionesData[grupo].options = opciones;
+    }
+    renderOpcionesList(grupo, opciones);
+  } catch (e) {
+    document.getElementById('opc-panel').innerHTML =
+      `<div class="opc-placeholder">Error: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderOpcionesList(grupo, opciones) {
+  const panel = document.getElementById('opc-panel');
+  const g     = (_opcionesData && _opcionesData[grupo]) || {};
+  const label   = g.label   || grupo;
+  const maxLen  = g.max_len || 200;
+
+  const listHtml = opciones.length
+    ? opciones.map((o, idx) => `
+      <div class="opc-item" id="opc-item-${o.id}">
+        <span class="opc-item-valor" id="opc-val-${o.id}">${escapeHtml(o.valor)}</span>
+        <span style="color:var(--text-muted);font-size:11px;margin-right:4px">#${o.orden}</span>
+        <!-- reorder up -->
+        <button class="opc-btn" title="Subir" onclick="moveOpcion(${o.id},'up','${escapeHtml(grupo)}')" ${idx === 0 ? 'disabled' : ''}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="18 15 12 9 6 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <!-- reorder down -->
+        <button class="opc-btn" title="Bajar" onclick="moveOpcion(${o.id},'down','${escapeHtml(grupo)}')" ${idx === opciones.length - 1 ? 'disabled' : ''}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="6 9 12 15 18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <!-- edit -->
+        <button class="opc-btn" title="Editar" onclick="editOpcion(${o.id},'${escapeHtml(o.valor.replace(/'/g,"&#39;"))}','${escapeHtml(grupo)}',${maxLen})">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+        <!-- delete -->
+        <button class="opc-btn del" title="Eliminar" onclick="deleteOpcion(${o.id},'${escapeHtml(grupo)}')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="2"/><path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2"/><path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>`).join('')
+    : `<div class="opc-empty">Sin opciones. Agrega la primera usando el campo de arriba.</div>`;
+
+  panel.innerHTML = `
+    <div class="opc-panel-header">
+      <span class="opc-panel-title">${escapeHtml(label)}</span>
+      <span style="font-size:11px;color:var(--text-muted)">${opciones.length} opcion${opciones.length !== 1 ? 'es' : ''}</span>
+    </div>
+    <div class="opc-add-bar">
+      <input type="text" id="opc-new-valor" placeholder="Nueva opcion..." maxlength="${maxLen}"
+             oninput="_opcCounterUpdate('opc-new-valor','opc-new-count',${maxLen})"
+             onkeydown="if(event.key==='Enter')addOpcion('${escapeHtml(grupo)}')" />
+      <span class="opc-char-count" id="opc-new-count">0 / ${maxLen}</span>
+      <button class="btn btn-primary btn-sm" onclick="addOpcion('${escapeHtml(grupo)}')">Agregar</button>
+    </div>
+    <div class="opc-list">${listHtml}</div>`;
+}
+
+function _opcCounterUpdate(inputId, countId, maxLen) {
+  const el    = document.getElementById(inputId);
+  const count = document.getElementById(countId);
+  if (!el || !count) return;
+  const len = el.value.length;
+  count.textContent = `${len} / ${maxLen}`;
+  count.classList.toggle('over', len > maxLen);
+}
+
+async function addOpcion(grupo) {
+  const inp = document.getElementById('opc-new-valor');
+  if (!inp) return;
+  const valor = inp.value.trim();
+  if (!valor) { toast('Escribe un valor', 'error'); return; }
+  const g      = (_opcionesData && _opcionesData[grupo]) || {};
+  const maxLen = g.max_len || 200;
+  if (valor.length > maxLen) { toast(`Maximo ${maxLen} caracteres`, 'error'); return; }
+  // Calcular siguiente orden
+  const opts   = (g.options || []);
+  const orden  = opts.length ? Math.max(...opts.map(o => o.orden)) + 1 : 1;
+  try {
+    await api('/api/mantenimiento/opciones', {
+      method: 'POST',
+      body: JSON.stringify({ grupo, valor, orden }),
+    });
+    inp.value = '';
+    document.getElementById('opc-new-count') && (document.getElementById('opc-new-count').textContent = `0 / ${maxLen}`);
+    toast('Opcion agregada', 'success');
+    await selectGrupo(grupo);
+    // Invalidar cache de mantenimiento para que recargue
+    window._opcionesCache = null;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function editOpcion(id, currentValor, grupo, maxLen) {
+  const valEl = document.getElementById(`opc-val-${id}`);
+  if (!valEl) return;
+  const item = valEl.closest('.opc-item');
+  // Guardar contenido original del item para poder cancelar
+  const origHtml = item.innerHTML;
+
+  valEl.outerHTML = `<span class="opc-item-edit" id="opc-edit-wrap-${id}">
+    <input id="opc-edit-inp-${id}" type="text" value="${escapeHtml(currentValor)}" maxlength="${maxLen}"
+           style="width:200px" />
+    <span class="opc-char-count" id="opc-edit-count-${id}">${currentValor.length} / ${maxLen}</span>
+  </span>`;
+
+  const inp = document.getElementById(`opc-edit-inp-${id}`);
+  if (!inp) return;
+  inp.addEventListener('input', () => _opcCounterUpdate(`opc-edit-inp-${id}`, `opc-edit-count-${id}`, maxLen));
+  inp.focus();
+  inp.select();
+
+  const commit = async () => {
+    const newVal = inp.value.trim();
+    if (!newVal || newVal === currentValor) { item.innerHTML = origHtml; return; }
+    if (newVal.length > maxLen) { toast(`Maximo ${maxLen} caracteres`, 'error'); return; }
+    // Get current orden from data cache
+    const opts  = (_opcionesData && _opcionesData[grupo] && _opcionesData[grupo].options) || [];
+    const found = opts.find(o => o.id === id);
+    const orden = found ? found.orden : 0;
+    try {
+      await api(`/api/mantenimiento/opciones/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ valor: newVal, orden, grupo }),
+      });
+      toast('Opcion actualizada', 'success');
+      window._opcionesCache = null;
+      await selectGrupo(grupo);
+    } catch (e) { toast(e.message, 'error'); item.innerHTML = origHtml; }
+  };
+
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+    if (e.key === 'Escape') { inp.removeEventListener('blur', commit); item.innerHTML = origHtml; }
+  });
+}
+
+async function deleteOpcion(id, grupo) {
+  if (!confirm('Eliminar esta opcion? Esta accion no se puede deshacer.')) return;
+  try {
+    await api(`/api/mantenimiento/opciones/${id}`, { method: 'DELETE' });
+    toast('Opcion eliminada', 'success');
+    window._opcionesCache = null;
+    await selectGrupo(grupo);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function moveOpcion(id, direction, grupo) {
+  const g    = (_opcionesData && _opcionesData[grupo]) || {};
+  const opts = (g.options || []).slice(); // shallow copy
+  const idx  = opts.findIndex(o => o.id === id);
+  if (idx < 0) return;
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= opts.length) return;
+
+  const a = opts[idx];
+  const b = opts[swapIdx];
+  // Swap orders
+  const tmpOrden = a.orden;
+  try {
+    await api(`/api/mantenimiento/opciones/${a.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ valor: a.valor, orden: b.orden, grupo }),
+    });
+    await api(`/api/mantenimiento/opciones/${b.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ valor: b.valor, orden: tmpOrden, grupo }),
+    });
+    window._opcionesCache = null;
+    await selectGrupo(grupo);
+  } catch (e) { toast(e.message, 'error'); }
 }

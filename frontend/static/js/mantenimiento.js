@@ -271,7 +271,7 @@ async function crearMantto() {
 ══════════════════════════════════════════════════════════ */
 
 let currentStep = 1;
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 3;
 
 async function abrirFormMantto() {
   currentStep = 1;
@@ -280,6 +280,8 @@ async function abrirFormMantto() {
   document.getElementById('form-mantto-title').textContent =
     `${herSeleccionado.Tipo}${herSeleccionado.CodMolde} — Rep. ${herSeleccionado._nextRep}`;
   document.getElementById('modal-form-mantto').classList.remove('hidden');
+  // Pre-cargar opciones dinamicas en paralelo con step1
+  loadOpcionesDynamic();
   await loadStep1();
 }
 
@@ -291,6 +293,8 @@ function closeFormMantto() {
   document.getElementById('modal-form-mantto').classList.add('hidden');
   manttoActivoId = null; imgConfig = null; herSeleccionado = null;
   recibeUsername = null; window._step2Data = null;
+  const finBtn = document.getElementById('btn-confirmar-finalizar');
+  if (finBtn) { finBtn.disabled = true; finBtn.classList.remove('pulse-once'); }
   loadManttos();
 }
 
@@ -344,6 +348,16 @@ async function resumeMantto(id) {
 }
 
 function renderStepBar() {
+  const nextBtn    = document.getElementById('btn-step-next');
+  const finalizBtn = document.getElementById('btn-confirmar-finalizar');
+  if (currentStep === 3) {
+    nextBtn.classList.add('hidden');
+    finalizBtn.classList.remove('hidden');
+  } else {
+    nextBtn.classList.remove('hidden');
+    finalizBtn.classList.add('hidden');
+  }
+
   document.querySelectorAll('.step').forEach(s => {
     const n = parseInt(s.dataset.step);
     s.classList.remove('active', 'done');
@@ -354,10 +368,7 @@ function renderStepBar() {
     l.classList.toggle('done', i + 1 < currentStep);
   });
   document.getElementById('btn-step-prev').classList.toggle('hidden', currentStep === 1);
-  const nextBtn = document.getElementById('btn-step-next');
-  nextBtn.innerHTML = currentStep === TOTAL_STEPS
-    ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Finalizar`
-    : `Siguiente <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="9,18 15,12 9,6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+  nextBtn.innerHTML = `Siguiente <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="9,18 15,12 9,6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 }
 
 function showStepContent(n) {
@@ -387,12 +398,6 @@ async function nextStep() {
     currentStep = 3;
     renderStepBar(); showStepContent(3);
     loadStep3(); // no await — la UI transiciona de inmediato, el resumen carga en background
-  } else if (currentStep === 3) {
-    currentStep = 4;
-    renderStepBar(); showStepContent(4);
-    loadStep4();
-  } else if (currentStep === 4) {
-    await finalizarMantto();
   }
 }
 
@@ -427,7 +432,11 @@ function _step2AutoSave() {
   }, 600);
 }
 
-function loadStep2() {
+async function loadStep2() {
+  // Cargar opciones dinamicas primero para que los selects tengan opciones
+  // antes de restaurar los valores guardados
+  await loadOpcionesDynamic();
+
   // Restaurar valores guardados si los hay
   if (window._step2Data) {
     document.getElementById('mant-tipo-mant').value     = window._step2Data.TipoMant || '';
@@ -556,6 +565,26 @@ function bindRecibeModal() {
     const inp = document.getElementById('recibe-password');
     inp.type = inp.type === 'password' ? 'text' : 'password';
   });
+
+  document.getElementById('btn-confirmar-finalizar').addEventListener('click', openConfirmarFinalizar);
+  document.getElementById('btn-cancel-confirm-finalizar').addEventListener('click', closeConfirmarFinalizar);
+  document.getElementById('btn-ok-confirm-finalizar').addEventListener('click', finalizarMantto);
+}
+
+function openConfirmarFinalizar() {
+  const her = herSeleccionado;
+  document.getElementById('confirm-finalizar-resumen').innerHTML = `
+    <div style="display:grid;gap:6px">
+      <div><b>Herramental:</b> ${her.Tipo}${her.CodMolde} — V${her.Version} P${her.Pieza}</div>
+      <div><b>Repetición:</b> #${her._nextRep}</div>
+      <div><b>Entrega:</b> ${document.getElementById('step3-entrega-name')?.textContent || '—'}</div>
+      <div><b>Recibe:</b> ${recibeUsername || '—'}</div>
+    </div>`;
+  document.getElementById('modal-confirm-finalizar').classList.remove('hidden');
+}
+
+function closeConfirmarFinalizar() {
+  document.getElementById('modal-confirm-finalizar').classList.add('hidden');
 }
 
 async function openRecibeModal() {
@@ -610,6 +639,9 @@ async function confirmarRecibe() {
       </div>`;
     closeRecibeModal();
     toast(`${username} confirmado como receptor`, 'success');
+    // Habilitar botón confirmar y finalizar
+    const finBtn = document.getElementById('btn-confirmar-finalizar');
+    if (finBtn) { finBtn.disabled = false; finBtn.classList.add('pulse-once'); }
   } catch {
     errEl.textContent = 'Usuario o contraseña incorrectos.';
     errEl.classList.remove('hidden');
@@ -632,24 +664,20 @@ function loadStep4() {
 }
 
 async function finalizarMantto() {
-  if (!recibeUsername) {
-    toast('Debes confirmar quien recibe antes de finalizar', 'error');
-    currentStep = 3; renderStepBar(); showStepContent(3);
-    return;
-  }
-  const btn = document.getElementById('btn-step-next');
-  btn.disabled = true;
+  const btn = document.getElementById('btn-ok-confirm-finalizar');
+  if (btn) btn.disabled = true;
   try {
     await api(`/api/mantenimiento/manttos/${manttoActivoId}`, {
       method: 'PUT',
-      body: JSON.stringify({ Estatus: 'Finalizado' }),  // FechaReleaseMant la pone el servidor
+      body: JSON.stringify({ Estatus: 'Finalizado' }),
     });
+    closeConfirmarFinalizar();
     closeFormMantto();
     toast('¡Mantenimiento finalizado correctamente!', 'success');
   } catch (e) {
     toast(e.message, 'error');
   } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -1328,4 +1356,29 @@ function renderManttoDetail(m) {
 
     ${medsSections}
   `;
+}
+
+/* ── OPCIONES DINAMICAS (dropdowns desde BD) ───────────────── */
+async function loadOpcionesDynamic() {
+  if (window._opcionesCache) return;
+  try {
+    const data = await api('/api/mantenimiento/opciones');
+    window._opcionesCache = data;
+    populateSelect('mant-tipo-mant',     (data['tipo_mant']     && data['tipo_mant'].options)     || []);
+    populateSelect('mant-estado-postes', (data['estado_postes'] && data['estado_postes'].options) || []);
+    populateSelect('mant-patron-ref',    (data['patron_ref']    && data['patron_ref'].options)    || []);
+  } catch (e) {
+    console.warn('No se pudieron cargar opciones dinamicas:', e.message);
+  }
+}
+
+function populateSelect(id, opciones) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  // Conservar primer option placeholder, reemplazar el resto
+  while (sel.options.length > 1) sel.remove(1);
+  opciones.forEach(o => {
+    sel.insertAdjacentHTML('beforeend',
+      `<option value="${escapeHtml(o.valor)}">${escapeHtml(o.valor)}</option>`);
+  });
 }

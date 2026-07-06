@@ -315,11 +315,6 @@
               <div class="select-wrapper">
                 <select id="mant-tipo-mant">
                   <option value="">-- Seleccione --</option>
-                  <option value="Mantenimiento Tipo 1">Mantenimiento Tipo 1</option>
-                  <option value="Mantenimiento Tipo 2">Mantenimiento Tipo 2</option>
-                  <option value="Mantenimiento Tipo 3">Mantenimiento Tipo 3</option>
-                  <option value="Mantenimiento Preventivo">Mantenimiento Preventivo</option>
-                  <option value="Mantenimiento Correctivo">Mantenimiento Correctivo</option>
                 </select>
               </div>
             </div>
@@ -329,10 +324,6 @@
               <div class="select-wrapper">
                 <select id="mant-estado-postes">
                   <option value="">-- Seleccione --</option>
-                  <option value="Bueno">Bueno</option>
-                  <option value="Regular">Regular</option>
-                  <option value="Malo">Malo</option>
-                  <option value="Requiere reemplazo">Requiere reemplazo</option>
                 </select>
               </div>
             </div>
@@ -342,10 +333,6 @@
               <div class="select-wrapper">
                 <select id="mant-patron-ref">
                   <option value="">-- Seleccione --</option>
-                  <option value="Vidrio original">Vidrio original</option>
-                  <option value="Galgas 3D">Galgas 3D</option>
-                  <option value="Galgas verificación">Galgas verificación</option>
-                  <option value="Ninguna">Ninguna</option>
                 </select>
               </div>
             </div>
@@ -396,26 +383,6 @@
         </div>
       </div>
 
-      <!-- PASO 4: ENTREGA / CONFIRMAR -->
-      <div class="step-content" id="step-content-4">
-        <div class="step-form-wrap">
-          <div class="step-form-card" style="text-align:center;max-width:500px">
-            <div style="margin-bottom:20px">
-              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" style="color:var(--primary)">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                <polyline points="9 12 11 14 15 10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
-            <h3 class="step-form-title">¿Finalizar el mantenimiento?</h3>
-            <p class="step-form-sub" style="margin-top:8px">
-              Esta acción marcará el mantenimiento como <b>Finalizado</b> y registrará la fecha de liberación.
-              No podrá editarse después.
-            </p>
-            <div id="step4-resumen" style="margin-top:20px;text-align:left"></div>
-          </div>
-        </div>
-      </div>
-
     </div>
 
     <div class="modal-footer">
@@ -428,6 +395,36 @@
         Siguiente
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="9,18 15,12 9,6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>
+      <button class="btn btn-success hidden" id="btn-confirmar-finalizar" disabled>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Confirmar y Finalizar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL CONFIRMAR FINALIZAR ──────────────────────────── -->
+<div class="modal-overlay hidden" id="modal-confirm-finalizar">
+  <div class="modal" style="max-width:420px;border-radius:16px;overflow:hidden">
+    <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);padding:20px 24px 16px;border-bottom:1px solid #bbf7d0;display:flex;align-items:flex-start;gap:14px">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style="color:#16a34a;flex-shrink:0;margin-top:2px">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+        <polyline points="9 12 11 14 15 10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div>
+        <div style="font-weight:700;font-size:16px;color:#15803d">¿Finalizar el mantenimiento?</div>
+        <div style="font-size:13px;color:#166534;margin-top:4px">Esta acción marcará el herramental como <b>Finalizado</b>. No podrá editarse después.</div>
+      </div>
+    </div>
+    <div style="padding:20px 24px">
+      <div id="confirm-finalizar-resumen" style="margin-bottom:20px;font-size:13px;line-height:1.8;color:var(--text)"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-outline" id="btn-cancel-confirm-finalizar">Cancelar</button>
+        <button class="btn btn-success" id="btn-ok-confirm-finalizar">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Sí, Finalizar
+        </button>
+      </div>
     </div>
   </div>
 </div>

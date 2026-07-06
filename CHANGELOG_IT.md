@@ -1,4 +1,5 @@
 # Changelog para IT — Despliegue Producción
+
 ## App: Control Inventarios Ingeniería (AGP GROUP)
 
 Este documento registra todos los cambios de estructura de base de datos y configuración
@@ -12,6 +13,7 @@ que deben aplicarse en el servidor de producción antes de desplegar la aplicaci
 **Estado:** Pendiente de aplicar en PROD
 
 ### Descripción
+
 La app usa paginación (100 registros + "Cargar más") con `ORDER BY fecha DESC`.
 Sin índices, SQL Server hace un full scan en cada página. Estos índices hacen
 las consultas ~10x más rápidas en producción con muchos usuarios simultáneos.
@@ -51,6 +53,7 @@ WHERE object_id IN (
 ```
 
 ### Impacto
+
 - Operación no destructiva — solo agrega índices (no modifica datos).
 - Puede tardar algunos segundos en tablas grandes (ManttoDetails con 234k filas).
 - **Sin pérdida de datos.** Sin reinicio necesario.
@@ -63,6 +66,7 @@ WHERE object_id IN (
 **Estado:** Pendiente de aplicar en PROD
 
 ### Descripción
+
 Se agregó la funcionalidad de "cancelación" de mantenimientos en estado **Pendiente**.
 Los registros **no se borran físicamente**; el campo `Estatus` cambia a `'Cancelado'`
 y se registran el motivo, el usuario que canceló y la fecha.
@@ -91,6 +95,7 @@ WHERE TABLE_NAME = 'AppControlInventarios_ManttoHead'
 ```
 
 ### Impacto
+
 - Operación no destructiva — solo agrega columnas nuevas (NULL por defecto).
 - Los mantenimientos cancelados quedan visibles en la lista con estatus 'Cancelado'.
 - Solo administradores pueden cancelar; solo aplica a registros con Estatus = 'Pendiente'.
@@ -104,6 +109,7 @@ WHERE TABLE_NAME = 'AppControlInventarios_ManttoHead'
 **Estado:** Pendiente de aplicar en PROD
 
 ### Problema
+
 Las columnas `Pieza`, `Version`, `CodHer` y `Tipo` en `ManttoHead` tienen tamaños muy pequeños
 (varchar(3), varchar(3), varchar(10), varchar(1)) heredados de la Power App original.
 Los valores reales del inventario son más largos (ej: Pieza `00/1840009` = 10 chars),
@@ -124,6 +130,7 @@ ALTER TABLE dbo.[AppControlInventarios_ManttoHead] ALTER COLUMN Tipo    NVARCHAR
 ```
 
 ### Impacto
+
 - Operación no destructiva — solo amplía el tamaño permitido, no borra datos.
 - Sin pérdida de datos existentes.
 - Requiere reinicio del servicio web.
@@ -137,6 +144,7 @@ ALTER TABLE dbo.[AppControlInventarios_ManttoHead] ALTER COLUMN Tipo    NVARCHAR
 **Estado:** Pendiente de aplicar en PROD
 
 ### Descripción
+
 Se agregó la funcionalidad de "eliminación lógica" en el inventario de herramientas.
 Los registros **no se borran físicamente** de la base de datos; en cambio, se marcan como
 inactivos (`Activo = 0`) y se registra quién los eliminó, cuándo, y por qué motivo.
@@ -173,6 +181,7 @@ FROM dbo.[AppControlInventarios_RegistroInventario];
 ```
 
 ### Impacto
+
 - Los registros existentes en producción recibirán `Activo = 1` automáticamente (DEFAULT).
 - La app **no mostrará** registros con `Activo = 0` en la tabla de consulta.
 - Requiere reinicio del servicio web luego de aplicar el script.
@@ -184,6 +193,7 @@ FROM dbo.[AppControlInventarios_RegistroInventario];
 
 **Fecha:** 2026-07  
 **Tablas utilizadas (solo lectura/escritura, sin cambios de estructura):**
+
 - `dbo.AppControlInventarios_RegistroInventario`
 - `dbo.AppControlInventarios_ManttoHerramientales`
 - `dbo.AppControlInventarios_ManttoHerramientalesDetalle`

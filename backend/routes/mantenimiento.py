@@ -403,6 +403,71 @@ def delete_mantto(id_mant):
     return jsonify({'ok': True})
 
 
+# ── OPCIONES (listas desplegables configurables) ──────────────────────────────
+
+@bp.route('/opciones', methods=['GET'])
+@login_required
+def list_opciones():
+    from backend.models.opciones import get_all
+    return jsonify(get_all())
+
+
+@bp.route('/opciones/<grupo>', methods=['GET'])
+@login_required
+def list_opciones_grupo(grupo):
+    from backend.models.opciones import get_by_grupo
+    return jsonify(get_by_grupo(grupo))
+
+
+@bp.route('/opciones', methods=['POST'])
+@login_required
+def create_opcion():
+    if not is_admin():
+        return jsonify({'error': 'Solo administradores'}), 403
+    from backend.models.opciones import create, MAX_LENS, GROUP_LABELS
+    body       = request.get_json() or {}
+    grupo      = body.get('grupo', '').strip()
+    valor      = body.get('valor', '').strip()
+    orden      = int(body.get('orden', 0))
+    if not grupo or not valor:
+        return jsonify({'error': 'grupo y valor son requeridos'}), 400
+    if grupo not in MAX_LENS:
+        return jsonify({'error': f'Grupo desconocido: {grupo}'}), 400
+    if len(valor) > MAX_LENS[grupo]:
+        return jsonify({'error': f'Valor excede {MAX_LENS[grupo]} caracteres'}), 400
+    grupo_label = GROUP_LABELS.get(grupo, grupo)
+    new_id = create(grupo, grupo_label, valor, orden)
+    return jsonify({'ok': True, 'id': new_id}), 201
+
+
+@bp.route('/opciones/<int:id_op>', methods=['PUT'])
+@login_required
+def update_opcion(id_op):
+    if not is_admin():
+        return jsonify({'error': 'Solo administradores'}), 403
+    from backend.models.opciones import update, MAX_LENS
+    body  = request.get_json() or {}
+    valor = body.get('valor', '').strip()
+    orden = int(body.get('orden', 0))
+    grupo = body.get('grupo', '').strip()
+    if not valor:
+        return jsonify({'error': 'valor es requerido'}), 400
+    if grupo and grupo in MAX_LENS and len(valor) > MAX_LENS[grupo]:
+        return jsonify({'error': f'Valor excede {MAX_LENS[grupo]} caracteres'}), 400
+    update(id_op, valor, orden)
+    return jsonify({'ok': True})
+
+
+@bp.route('/opciones/<int:id_op>', methods=['DELETE'])
+@login_required
+def delete_opcion(id_op):
+    if not is_admin():
+        return jsonify({'error': 'Solo administradores'}), 403
+    from backend.models.opciones import delete
+    delete(id_op)
+    return jsonify({'ok': True})
+
+
 def _save_file(file_obj):
     """Sube imagen a Azure Blob Storage y retorna la URL pública."""
     if not file_obj or not allowed_file(file_obj.filename):

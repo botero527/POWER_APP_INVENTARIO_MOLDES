@@ -289,6 +289,15 @@ a { text-decoration: none; color: inherit; }
 
 .btn-block { width: 100%; justify-content: center; }
 
+.btn-success {
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(22,163,74,.35);
+}
+.btn-success:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(22,163,74,.45); }
+.btn-success:active { transform: none; }
+.btn-success:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
+
 /* ── MODALS ────────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed; inset: 0; z-index: 200;
@@ -414,6 +423,13 @@ a { text-decoration: none; color: inherit; }
   animation: spin .7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+@keyframes pulse-once {
+  0%   { box-shadow: 0 0 0 0 rgba(22,163,74,.6); }
+  60%  { box-shadow: 0 0 0 10px rgba(22,163,74,0); }
+  100% { box-shadow: 0 0 0 0 rgba(22,163,74,0); }
+}
+.pulse-once { animation: pulse-once .7s ease-out; }
 
 /* ── SCROLLBAR ─────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
