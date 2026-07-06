@@ -83,10 +83,6 @@ function renderImgGrid(rows) {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2"/></svg>
             Editar
           </button>
-          <button class="img-card-btn download" onclick="downloadImg('${imgSrc}','${r.Nombre_Imagen}')">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2"/><line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2"/></svg>
-            Descargar
-          </button>
           <button class="img-card-btn del" onclick="deleteImg(${r.id},'${r.Nombre_Imagen}')">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="2"/><path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2"/><path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
             Eliminar
@@ -96,11 +92,6 @@ function renderImgGrid(rows) {
   }).join('');
 }
 
-function downloadImg(src, nombre) {
-  if (!src) { toast('Esta imagen no tiene archivo guardado', 'error'); return; }
-  const a = document.createElement('a');
-  a.href = src; a.download = nombre; a.click();
-}
 
 async function deleteImg(id, nombre) {
   if (!confirm(`¿Eliminar la imagen "${nombre}"?`)) return;
@@ -137,6 +128,47 @@ function bindImgModal() {
     document.getElementById(id).addEventListener('input', updateNombrePreview);
     document.getElementById(id).addEventListener('change', updateNombrePreview);
   });
+
+  // Buscador de inventario
+  document.getElementById('btn-inv-search').addEventListener('click', searchInvForImg);
+  document.getElementById('img-inv-search').addEventListener('keydown', e => {
+    if (e.key === 'Enter') searchInvForImg();
+  });
+}
+
+async function searchInvForImg() {
+  const cod = document.getElementById('img-inv-search').value.trim();
+  const resultsEl = document.getElementById('img-inv-results');
+  if (!cod) return;
+  resultsEl.innerHTML = `<div style="padding:10px;font-size:13px;color:var(--text-muted)">Buscando...</div>`;
+  resultsEl.classList.remove('hidden');
+  try {
+    const rows = await api(`/api/mantenimiento/inventario-search?cod=${encodeURIComponent(cod)}`);
+    if (!rows.length) {
+      resultsEl.innerHTML = `<div style="padding:10px;font-size:13px;color:var(--text-muted)">Sin resultados</div>`;
+      return;
+    }
+    resultsEl.innerHTML = rows.map(r => `
+      <div class="inv-result-item" data-tipo="${escapeHtml(r.Tipo)}" data-cod="${escapeHtml(r.CodMolde)}"
+           data-version="${escapeHtml(r.Version ?? '')}" data-pieza="${escapeHtml(r.Pieza ?? '')}">
+        <span class="badge-tipo">${escapeHtml(r.Tipo)}</span>
+        <span class="inv-name">${escapeHtml(r.CodMolde)}</span>
+        <span class="inv-sub">V:${escapeHtml(r.Version ?? '—')} &nbsp; P:${escapeHtml(r.Pieza ?? '—')} &nbsp; ${escapeHtml(r.Vehiculo ?? '')}</span>
+      </div>`).join('');
+    resultsEl.querySelectorAll('.inv-result-item').forEach(el => {
+      el.addEventListener('click', () => {
+        document.getElementById('img-tipo').value    = el.dataset.tipo;
+        document.getElementById('img-cod').value     = el.dataset.cod;
+        document.getElementById('img-version').value = el.dataset.version;
+        document.getElementById('img-pieza').value   = el.dataset.pieza;
+        updateNombrePreview();
+        resultsEl.classList.add('hidden');
+        document.getElementById('img-inv-search').value = '';
+      });
+    });
+  } catch(e) {
+    resultsEl.innerHTML = `<div style="padding:10px;font-size:13px;color:red">Error: ${escapeHtml(e.message)}</div>`;
+  }
 }
 
 function setPreviewFile(file) {
@@ -151,11 +183,17 @@ function setPreviewFile(file) {
   document.getElementById('img-file-input')._file = file;
 }
 
+function _pad3(val) {
+  if (!val) return 'XXX';
+  const n = parseInt(val, 10);
+  return isNaN(n) ? val : String(n).padStart(3, '0');
+}
+
 function updateNombrePreview() {
   const tipo    = document.getElementById('img-tipo').value;
   const cod     = document.getElementById('img-cod').value.trim()     || 'XXXX';
-  const version = document.getElementById('img-version').value.trim() || 'XXX';
-  const pieza   = document.getElementById('img-pieza').value.trim()   || 'XXX';
+  const version = _pad3(document.getElementById('img-version').value.trim());
+  const pieza   = _pad3(document.getElementById('img-pieza').value.trim());
   document.getElementById('nombre-generado').textContent = tipo ? `${tipo}|${cod}|${version}|${pieza}` : '--';
 }
 
@@ -200,6 +238,8 @@ function resetImgForm() {
   document.getElementById('img-file-input').value = '';
   document.getElementById('img-file-input')._file = null;
   document.getElementById('nombre-generado').textContent = '--';
+  document.getElementById('img-inv-search').value = '';
+  document.getElementById('img-inv-results').classList.add('hidden');
 }
 
 function closeImgModal() {
@@ -570,6 +610,36 @@ function bindFilters() {
 }
 
 /* ── BOTONES GENERALES ─────────────────────────────────────── */
+async function checkImgStatus() {
+  const tipo    = document.getElementById('form-tipo').value;
+  const cod     = document.getElementById('form-cod-molde').value.trim();
+  const version = document.getElementById('form-version').value.trim();
+  const pieza   = document.getElementById('form-pieza').value.trim();
+  const bar     = document.getElementById('img-status-bar');
+
+  if (!tipo || !cod) { bar.classList.add('hidden'); return; }
+
+  const params = new URLSearchParams({ tipo, cod });
+  if (version) params.set('version', version);
+  if (pieza)   params.set('pieza', pieza);
+
+  try {
+    const img = await fetch(`/api/mantenimiento/imagenes/buscar?${params}`)
+      .then(r => r.ok ? r.json() : null).catch(() => null);
+
+    bar.classList.remove('hidden', 'found', 'missing');
+    if (img) {
+      bar.classList.add('found');
+      bar.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Imagen encontrada: <strong>${escapeHtml(img.Nombre_Imagen)}</strong></span>`;
+    } else {
+      bar.classList.add('missing');
+      bar.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="2"/><line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2"/><line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2"/></svg>
+        <span>Sin imagen asociada — este herramental no tiene imagen configurada en Gestión de Imágenes.</span>`;
+    }
+  } catch { bar.classList.add('hidden'); }
+}
+
 function bindButtons() {
   document.getElementById('btn-agregar').addEventListener('click', () => {
     pendingAction = 'add';
@@ -588,6 +658,14 @@ function bindButtons() {
   document.getElementById('btn-close-form').addEventListener('click', closeFormModal);
   document.getElementById('btn-cancel-form').addEventListener('click', closeFormModal);
   document.getElementById('btn-save-form').addEventListener('click', saveForm);
+
+  // Validación de imagen al llenar los campos clave
+  let imgCheckTimer;
+  ['form-tipo', 'form-cod-molde', 'form-version', 'form-pieza'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input',  () => { clearTimeout(imgCheckTimer); imgCheckTimer = setTimeout(checkImgStatus, 600); });
+    el.addEventListener('change', () => { clearTimeout(imgCheckTimer); imgCheckTimer = setTimeout(checkImgStatus, 300); });
+  });
 
   // Delete modal
   document.getElementById('btn-close-delete').addEventListener('click', closeDeleteModal);
@@ -738,10 +816,12 @@ async function openFormModal(id) {
   }
 
   document.getElementById('modal-form').classList.remove('hidden');
+  checkImgStatus();
 }
 
 function closeFormModal() {
   document.getElementById('modal-form').classList.add('hidden');
+  document.getElementById('img-status-bar').classList.add('hidden');
   editTarget = null;
 }
 

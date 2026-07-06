@@ -266,7 +266,11 @@
             <div class="step1-subtab-content active" id="subtab-ajuste">
               <div class="subtab-header">
                 <span class="subtab-title">Puntos de Ajuste</span>
-                <span class="subtab-hint">Escribe el valor y presiona ✓ para guardar cada punto</span>
+                <span class="subtab-hint">Escribe el valor y presiona <kbd>Enter</kbd> para avanzar</span>
+              </div>
+              <div class="measure-progress">
+                <span id="ajuste-progress-text">0 / 0</span>
+                <div class="measure-progress-bar"><div class="measure-progress-fill" id="ajuste-progress-fill" style="width:0%"></div></div>
               </div>
               <div id="ajuste-inputs" class="measure-list">
                 <div class="grid-loading"><span class="spinner"></span></div>
@@ -277,7 +281,11 @@
             <div class="step1-subtab-content" id="subtab-espesor">
               <div class="subtab-header">
                 <span class="subtab-title">Espesor de Pista</span>
-                <span class="subtab-hint">Escribe el valor y presiona ✓ para guardar cada punto</span>
+                <span class="subtab-hint">Escribe el valor y presiona <kbd>Enter</kbd> para avanzar</span>
+              </div>
+              <div class="measure-progress">
+                <span id="espesor-progress-text">0 / 0</span>
+                <div class="measure-progress-bar"><div class="measure-progress-fill" id="espesor-progress-fill" style="width:0%"></div></div>
               </div>
               <div id="espesor-inputs" class="measure-list">
                 <div class="grid-loading"><span class="spinner"></span></div>
@@ -330,7 +338,20 @@
             </div>
 
             <div class="form-group" style="margin-top:16px">
-              <label>Observaciones <small class="text-muted">(solo si aplica)</small></label>
+              <label>Patrón de referencia <span class="required">*</span></label>
+              <div class="select-wrapper">
+                <select id="mant-patron-ref">
+                  <option value="">-- Seleccione --</option>
+                  <option value="Vidrio original">Vidrio original</option>
+                  <option value="Galgas 3D">Galgas 3D</option>
+                  <option value="Galgas verificación">Galgas verificación</option>
+                  <option value="Ninguna">Ninguna</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-top:16px">
+              <label>Observaciones <span class="required">*</span></label>
               <textarea id="mant-observaciones" rows="4"
                 placeholder="Ingrese observaciones relevantes del mantenimiento..."
                 style="width:100%;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font);font-size:13px;resize:vertical;outline:none;color:var(--text);background:var(--surface)"></textarea>

@@ -1,4 +1,21 @@
 ﻿/* ── STATE ─────────────────────────────────────────────── */
+let currentUser = null;
+let currentRol  = null;
+
+// Retorna img solo si es específica para el molde (no wildcard XXXX en el código)
+function isSpecificImg(img) {
+  if (!img) return false;
+  const parts = (img.Nombre_Imagen || '').split('|');
+  return parts.length >= 2 && parts[1] !== 'XXXX' && parts[1] !== '';
+}
+
+function resolveImgSrc(idStorage) {
+  if (!idStorage) return null;
+  if (idStorage.startsWith('JTJ') || idStorage.startsWith('JTI')) return null;
+  if (idStorage.startsWith('https://') || idStorage.startsWith('http://')) return idStorage;
+  if (idStorage.startsWith('/')) return idStorage;
+  return `/static/${idStorage}`;
+}
 
 /* ── INIT ──────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -66,10 +83,12 @@ async function doLogin() {
 }
 
 function showApp(me) {
+  currentUser = me.username || me.UserName;
+  currentRol  = me.rol     || me.Rol || '';
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('mantto-screen').classList.remove('hidden');
-  document.getElementById('mant-username-label').textContent = me.username || me.UserName;
-  document.getElementById('mant-role-badge').textContent = me.rol || me.Rol || '';
+  document.getElementById('mant-username-label').textContent = currentUser;
+  document.getElementById('mant-role-badge').textContent = currentRol;
 
   document.getElementById('btn-logout').addEventListener('click', async () => {
     await api('/api/mantenimiento/logout', { method: 'POST' });
@@ -189,18 +208,7 @@ async function seleccionarHer(idRegistro) {
   const row = (window._buscarRows || []).find(r => r.IdRegistro === idRegistro);
   if (!row) return;
   herSeleccionado = row;
-
-  // Obtener siguiente repetición del backend (evita NaN y es más rápido)
-  const repParams = new URLSearchParams({
-    tipo: row.Tipo, cod: row.CodMolde, version: row.Version, pieza: row.Pieza
-  });
-  let nextRep = 1;
-  try {
-    const repData = await api(`/api/mantenimiento/manttos/next-rep?${repParams}`);
-    nextRep = repData.next_rep ?? 1;
-  } catch { nextRep = 1; }
-
-  herSeleccionado._nextRep = nextRep;
+  herSeleccionado._nextRep = row.Repeticion ?? '--';
 
   // Mostrar confirmación
   closeBuscarHer();
@@ -212,7 +220,7 @@ async function seleccionarHer(idRegistro) {
     <div class="confirm-row"><span class="confirm-label">Descripción</span><span class="confirm-value">${row.Adicionales || row.Lote || '--'}</span></div>
     <div class="confirm-rep">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      Se creará la Repetición #${nextRep}
+      Repetición: ${row.Repeticion ?? '--'}
     </div>
   `;
   document.getElementById('modal-confirmar-mantto').classList.remove('hidden');
@@ -304,7 +312,7 @@ async function resumeMantto(id) {
 
     // Determinar en qué paso retomar
     let startStep = 1;
-    if (m.TipoMant && m.EstadoPostes) startStep = 3;
+    if (m.TipoMant && m.EstadoPostes && m.PatronReferencia && m.Observaciones) startStep = 3;
     else if (m.TipoMant || m.EstadoPostes) startStep = 2;
 
     currentStep = startStep;
@@ -359,6 +367,15 @@ function showStepContent(n) {
 
 async function nextStep() {
   if (currentStep === 1) {
+    // Validar que todos los campos tengan valor
+    const empty = [...document.querySelectorAll('#subtab-ajuste .measure-input, #subtab-espesor .measure-input')]
+      .filter(inp => inp.closest('.measure-list') && inp.value.trim() === '');
+    if (empty.length) {
+      toast(`Faltan ${empty.length} campo${empty.length > 1 ? 's' : ''} por llenar`, 'error');
+      empty[0].closest('.measure-row').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      empty[0].focus();
+      return;
+    }
     const saved = await saveAllStep1();
     if (!saved) return;
     currentStep = 2;
@@ -369,7 +386,7 @@ async function nextStep() {
     if (!ok) return;
     currentStep = 3;
     renderStepBar(); showStepContent(3);
-    await loadStep3();
+    loadStep3(); // no await — la UI transiciona de inmediato, el resumen carga en background
   } else if (currentStep === 3) {
     currentStep = 4;
     renderStepBar(); showStepContent(4);
@@ -400,8 +417,9 @@ function _step2AutoSave() {
         method: 'PUT',
         body: JSON.stringify({
           TipoMant:      document.getElementById('mant-tipo-mant').value,
-          EstadoPostes:  document.getElementById('mant-estado-postes').value,
-          Observaciones: document.getElementById('mant-observaciones').value,
+          EstadoPostes:     document.getElementById('mant-estado-postes').value,
+          PatronReferencia: document.getElementById('mant-patron-ref').value,
+          Observaciones:    document.getElementById('mant-observaciones').value,
         }),
       });
       if (label) { label.textContent = '✓ Guardado automáticamente'; setTimeout(() => label.textContent = '', 2000); }
@@ -414,11 +432,12 @@ function loadStep2() {
   if (window._step2Data) {
     document.getElementById('mant-tipo-mant').value     = window._step2Data.TipoMant || '';
     document.getElementById('mant-estado-postes').value = window._step2Data.EstadoPostes || '';
+    document.getElementById('mant-patron-ref').value    = window._step2Data.PatronReferencia || '';
     document.getElementById('mant-observaciones').value = window._step2Data.Observaciones || '';
   }
 
   // Quitar listeners previos antes de volver a agregar (evita duplicados)
-  ['mant-tipo-mant','mant-estado-postes','mant-observaciones'].forEach(id => {
+  ['mant-tipo-mant','mant-estado-postes','mant-patron-ref','mant-observaciones'].forEach(id => {
     const el = document.getElementById(id);
     el.removeEventListener('input', _step2AutoSave);
     el.removeEventListener('change', _step2AutoSave);
@@ -430,18 +449,18 @@ function loadStep2() {
 async function saveStep2() {
   const tipo   = document.getElementById('mant-tipo-mant').value;
   const estado = document.getElementById('mant-estado-postes').value;
-  const obs    = document.getElementById('mant-observaciones').value;
-  if (!tipo || !estado) {
-    toast('Selecciona el tipo de mantenimiento y el estado de los postes', 'error');
+  const patron = document.getElementById('mant-patron-ref').value;
+  const obs    = document.getElementById('mant-observaciones').value.trim();
+  if (!tipo || !estado || !patron || !obs) {
+    toast('Todos los campos del paso 2 son obligatorios', 'error');
     return false;
   }
   try {
     await api(`/api/mantenimiento/manttos/${manttoActivoId}`, {
       method: 'PUT',
-      body: JSON.stringify({ TipoMant: tipo, EstadoPostes: estado, Observaciones: obs }),
+      body: JSON.stringify({ TipoMant: tipo, EstadoPostes: estado, PatronReferencia: patron, Observaciones: obs }),
     });
-    // Actualizar cache para que al volver al paso 2 muestre los valores correctos
-    window._step2Data = { ...(window._step2Data || {}), TipoMant: tipo, EstadoPostes: estado, Observaciones: obs };
+    window._step2Data = { ...(window._step2Data || {}), TipoMant: tipo, EstadoPostes: estado, PatronReferencia: patron, Observaciones: obs };
     return true;
   } catch (e) {
     toast(e.message, 'error');
@@ -487,7 +506,7 @@ async function loadStep3() {
 }
 
 function buildResumenHTML(m) {
-  const img = m._img;
+  const img = m._img || null;
   const imgSrc = img ? resolveImgSrc(img.IdStorage) : null;
 
   const claseLabel = {
@@ -523,6 +542,7 @@ function buildResumenHTML(m) {
       <div class="detail-card-title">Detalle del Mantenimiento</div>
       <div class="detail-row"><span class="detail-label">Tipo mantenimiento</span><span class="detail-value">${escapeHtml(m.TipoMant || '--')}</span></div>
       <div class="detail-row"><span class="detail-label">Estado de postes</span><span class="detail-value">${escapeHtml(m.EstadoPostes || '--')}</span></div>
+      <div class="detail-row"><span class="detail-label">Patrón de referencia</span><span class="detail-value">${escapeHtml(m.PatronReferencia || '--')}</span></div>
       <div class="detail-row"><span class="detail-label">Observaciones</span><span class="detail-value">${escapeHtml(m.Observaciones || 'No registra')}</span></div>
     </div>`;
 }
@@ -646,25 +666,37 @@ async function loadStep1() {
   const her = herSeleccionado;
   if (!her) return;
 
-  // Buscar config de imagen (cantidad_puntos y puntos_esp_pista)
-  try {
-    const params = new URLSearchParams({
-      tipo:    her.Tipo,
-      cod:     her.CodMolde,
-      version: normalizarCodImg(her.Version),
-      pieza:   normalizarCodImg(her.Pieza),
-    });
-    const imgRow = await api(`/api/mantenimiento/imagenes/buscar?${params}`);
-    imgConfig = imgRow;
-  } catch (e) {
-    if (!e.message?.includes('404')) console.warn('buscar imagen:', e.message);
-    imgConfig = null;
-  }
+  const imgParams = new URLSearchParams({
+    tipo:    her.Tipo,
+    cod:     her.CodMolde,
+    version: normalizarCodImg(her.Version),
+    pieza:   normalizarCodImg(her.Pieza),
+  });
+
+  // Imagen y detalles existentes en paralelo
+  const [imgResult, detailResult] = await Promise.allSettled([
+    api(`/api/mantenimiento/imagenes/buscar?${imgParams}`),
+    manttoActivoId ? api(`/api/mantenimiento/manttos/${manttoActivoId}`) : Promise.resolve(null),
+  ]);
+
+  imgConfig = imgResult.status === 'fulfilled' ? imgResult.value : null;
+  if (imgResult.status === 'rejected' && !imgResult.reason?.message?.includes('404'))
+    console.warn('buscar imagen:', imgResult.reason?.message);
 
   renderStep1Image();
   renderAjusteInputs();
   renderEspesorInputs();
-  await loadExistingDetails();
+
+  // Poblar valores ya guardados (del fetch paralelo, sin segunda llamada)
+  if (detailResult.status === 'fulfilled' && detailResult.value) {
+    const byClase = detailResult.value.details_by_clase || {};
+    const ajuste  = byClase['MedidaTolerancia_Mantenimiento'] || [];
+    const espesor = byClase['EspesorPista_Mantenimiento'] || [];
+    ajuste.forEach(d  => setFieldSaved('ajuste',  d.IdMed, d.Value));
+    espesor.forEach(d => setFieldSaved('espesor', d.IdMed, d.Value));
+    // Guardar cache para paso 2 también
+    if (!window._step2Data) window._step2Data = detailResult.value;
+  }
 }
 
 function renderStep1Image() {
@@ -684,9 +716,11 @@ function _measureRowHtml(prefix, idMed, clase) {
   return `
     <div class="measure-row" id="row-${prefix}-${idMed}">
       <div class="measure-point" id="dot-${prefix}-${idMed}">${idMed}</div>
-      <input class="measure-input" type="number" step="0.01"
-        id="inp-${prefix}-${idMed}" placeholder="0.00"
-        oninput="onMeasureChange('${prefix}', ${idMed})" />
+      <span class="measure-label">Punto ${idMed}</span>
+      <input class="measure-input" type="text" inputmode="decimal"
+        id="inp-${prefix}-${idMed}" placeholder="—"
+        oninput="onMeasureChange('${prefix}', ${idMed})"
+        onkeydown="onMeasureKeydown(event, '${prefix}', ${idMed}, '${clase}')" />
       <button class="measure-action-btn" id="btn-${prefix}-${idMed}"
         title="Guardar" onclick="saveSingleMeasure('${prefix}', ${idMed}, '${clase}')">
         <svg class="icon-check" width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -698,6 +732,44 @@ function _measureRowHtml(prefix, idMed, clase) {
         </svg>
       </button>
     </div>`;
+}
+
+// Auto-decimal: "15" → "1.5", "150" → "1.50", "1.5" → "1.5" (ya tiene punto, no tocar)
+function autoDecimal(raw) {
+  const s = String(raw).trim();
+  if (!s) return '';
+  if (s.includes('.')) return s;           // ya tiene punto manual
+  if (s.length === 1) return s;            // solo un dígito, esperar más
+  return s[0] + '.' + s.slice(1);         // primer dígito + punto + resto
+}
+
+function onMeasureKeydown(e, prefix, idMed, clase) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const inp = document.getElementById(`inp-${prefix}-${idMed}`);
+    if (!inp.value.trim()) return;
+    // Marcar visualmente como llenado (sin llamar API — se guarda en batch al Siguiente)
+    setFieldSaved(prefix, idMed, null);
+    // Saltar al siguiente campo sin guardar aún
+    const subtabId = prefix === 'ajuste' ? 'subtab-ajuste' : 'subtab-espesor';
+    const allInputs = [...document.querySelectorAll(`#${subtabId} .measure-input`)];
+    const idx = allInputs.findIndex(el => el === inp);
+    const next = allInputs[idx + 1];
+    if (next) {
+      setFieldEditing(prefix, parseInt(next.id.replace(`inp-${prefix}-`, ''), 10));
+    }
+  }
+}
+
+function updateProgress(prefix) {
+  const rows = [...document.querySelectorAll(`[id^="row-${prefix}-"]`)];
+  const total = rows.length;
+  const done  = rows.filter(r => r.classList.contains('saved-row')).length;
+  const pct   = total ? Math.round(done / total * 100) : 0;
+  const textEl = document.getElementById(`${prefix}-progress-text`);
+  const fillEl = document.getElementById(`${prefix}-progress-fill`);
+  if (textEl) textEl.textContent = `${done} / ${total}`;
+  if (fillEl) fillEl.style.width = `${pct}%`;
 }
 
 function renderAjusteInputs() {
@@ -718,6 +790,9 @@ function renderAjusteInputs() {
     html += _measureRowHtml('ajuste', i, 'MedidaTolerancia_Mantenimiento');
   }
   container.innerHTML = html;
+  updateProgress('ajuste');
+  // Foco en el primer campo al abrir
+  setTimeout(() => document.getElementById('inp-ajuste-1')?.focus(), 100);
 }
 
 function renderEspesorInputs() {
@@ -737,6 +812,7 @@ function renderEspesorInputs() {
     html += _measureRowHtml('espesor', p, 'EspesorPista_Mantenimiento');
   });
   container.innerHTML = html;
+  updateProgress('espesor');
 }
 
 async function loadExistingDetails() {
@@ -751,13 +827,30 @@ async function loadExistingDetails() {
   } catch { /* sin datos existentes */ }
 }
 
-// Cuando escribe: habilita el campo y muestra chulo (pendiente de guardar)
+// Cuando escribe: muestra fila activa
 function onMeasureChange(prefix, idMed) {
   const inp = document.getElementById(`inp-${prefix}-${idMed}`);
   const dot = document.getElementById(`dot-${prefix}-${idMed}`);
+  const row = document.getElementById(`row-${prefix}-${idMed}`);
   const btn = document.getElementById(`btn-${prefix}-${idMed}`);
+
+  // Reemplazar coma por punto
+  if (inp.value.includes(',')) {
+    inp.value = inp.value.replace(',', '.');
+  }
+  // Aplicar auto-decimal mientras escribe (solo si no tiene punto)
+  const raw = inp.value;
+  if (raw && !raw.includes('.') && raw.length >= 2) {
+    const converted = autoDecimal(raw);
+    if (converted !== raw) {
+      inp.value = converted;
+      inp.setSelectionRange(converted.length, converted.length);
+    }
+  }
+
   inp.classList.remove('saved');
-  if (dot) dot.classList.remove('saved');
+  if (row) { row.classList.remove('saved-row'); row.classList.add('active-row'); }
+  if (dot) { dot.classList.remove('saved', 'active'); dot.classList.add('active'); }
   if (btn) {
     btn.classList.remove('btn-edit-mode');
     btn.querySelector('.icon-check').style.display = '';
@@ -770,12 +863,14 @@ function onMeasureChange(prefix, idMed) {
 function setFieldSaved(prefix, idMed, value) {
   const inp = document.getElementById(`inp-${prefix}-${idMed}`);
   const dot = document.getElementById(`dot-${prefix}-${idMed}`);
+  const row = document.getElementById(`row-${prefix}-${idMed}`);
   const btn = document.getElementById(`btn-${prefix}-${idMed}`);
   if (!inp) return;
   if (value !== null && value !== undefined) inp.value = value;
   inp.classList.add('saved');
   inp.readOnly = true;
-  if (dot) dot.classList.add('saved');
+  if (row) { row.classList.remove('active-row'); row.classList.add('saved-row'); }
+  if (dot) { dot.classList.remove('active'); dot.classList.add('saved'); }
   if (btn) {
     btn.classList.add('btn-edit-mode');
     btn.querySelector('.icon-check').style.display = 'none';
@@ -783,18 +878,23 @@ function setFieldSaved(prefix, idMed, value) {
     btn.title = 'Editar';
     btn.onclick = () => setFieldEditing(prefix, idMed);
   }
+  updateProgress(prefix);
 }
 
 // Vuelve el campo a modo edición (click en lápiz)
 function setFieldEditing(prefix, idMed) {
   const clase = prefix === 'ajuste' ? 'MedidaTolerancia_Mantenimiento' : 'EspesorPista_Mantenimiento';
   const inp = document.getElementById(`inp-${prefix}-${idMed}`);
+  const row = document.getElementById(`row-${prefix}-${idMed}`);
+  const dot = document.getElementById(`dot-${prefix}-${idMed}`);
   const btn = document.getElementById(`btn-${prefix}-${idMed}`);
   if (!inp) return;
   inp.readOnly = false;
+  inp.classList.remove('saved');
+  if (row) { row.classList.remove('saved-row'); row.classList.add('active-row'); }
+  if (dot) { dot.classList.remove('saved'); dot.classList.add('active'); }
   inp.focus();
   inp.select();
-  inp.classList.remove('saved');
   if (btn) {
     btn.classList.remove('btn-edit-mode');
     btn.querySelector('.icon-check').style.display = '';
@@ -802,13 +902,16 @@ function setFieldEditing(prefix, idMed) {
     btn.title = 'Guardar';
     btn.onclick = () => saveSingleMeasure(prefix, idMed, clase);
   }
+  updateProgress(prefix);
 }
 
 // Guarda UN campo individualmente
-async function saveSingleMeasure(prefix, idMed, clase) {
+async function saveSingleMeasure(prefix, idMed, clase, advance = false) {
   if (!manttoActivoId) return;
   const inp = document.getElementById(`inp-${prefix}-${idMed}`);
-  const value = parseFloat(inp.value);
+  const raw = inp.value.trim();
+  if (!raw) { toast('Ingresa un valor', 'error'); return; }
+  const value = parseFloat(raw);
   if (isNaN(value)) { toast('Ingresa un valor numérico', 'error'); return; }
 
   const btn = document.getElementById(`btn-${prefix}-${idMed}`);
@@ -826,12 +929,12 @@ async function saveSingleMeasure(prefix, idMed, clase) {
   }
 }
 
-// Guarda en batch los campos que NO estén ya guardados (readOnly)
+// Guarda en batch TODOS los campos con valor (incluyendo los marcados visualmente con Enter)
 async function saveStep1Batch(clase) {
   if (!manttoActivoId) return true;
   const prefix = clase === 'MedidaTolerancia_Mantenimiento' ? 'ajuste' : 'espesor';
   const inputs = [...document.querySelectorAll(`[id^="inp-${prefix}-"]`)]
-    .filter(inp => !inp.readOnly);  // solo los no guardados
+    .filter(inp => inp.value.trim() !== '');
 
   if (!inputs.length) return true;
 
@@ -854,17 +957,46 @@ async function saveStep1Batch(clase) {
   }
 }
 
-// Guarda AMBAS clases — llamado desde Siguiente paso 1
+// Guarda AMBAS clases en una sola llamada — llamado desde Siguiente paso 1
 async function saveAllStep1() {
+  if (!manttoActivoId) return true;
   const label = document.getElementById('step-auto-save-label');
   if (label) label.textContent = 'Guardando...';
-  const ok1 = await saveStep1Batch('MedidaTolerancia_Mantenimiento');
-  const ok2 = await saveStep1Batch('EspesorPista_Mantenimiento');
-  if (label) {
-    label.textContent = (ok1 && ok2) ? '✓ Todo guardado' : 'Error al guardar';
-    setTimeout(() => { if (label) label.textContent = ''; }, 2500);
+
+  const clases = [
+    { prefix: 'ajuste',  clase: 'MedidaTolerancia_Mantenimiento' },
+    { prefix: 'espesor', clase: 'EspesorPista_Mantenimiento' },
+  ];
+  const items = clases.flatMap(({ prefix, clase }) =>
+    [...document.querySelectorAll(`[id^="inp-${prefix}-"]`)]
+      .filter(inp => inp.value.trim() !== '')
+      .map(inp => ({
+        id_med: parseInt(inp.id.replace(`inp-${prefix}-`, ''), 10),
+        clase,
+        value:  parseFloat(inp.value) || 0,
+      }))
+  );
+
+  if (!items.length) {
+    if (label) label.textContent = '';
+    return true;
   }
-  return ok1 && ok2;
+
+  try {
+    await api(`/api/mantenimiento/manttos/${manttoActivoId}/details/batch`, {
+      method: 'PUT',
+      body: JSON.stringify({ items }),
+    });
+    clases.forEach(({ prefix, clase }) => {
+      items.filter(i => i.clase === clase).forEach(i => setFieldSaved(prefix, i.id_med, null));
+    });
+    if (label) { label.textContent = '✓ Todo guardado'; setTimeout(() => { if (label) label.textContent = ''; }, 2500); }
+    return true;
+  } catch {
+    toast('Error al guardar. Intenta de nuevo.', 'error');
+    if (label) label.textContent = 'Error al guardar';
+    return false;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -990,7 +1122,7 @@ function manttoRowHtml(m) {
       <td><span class="estatus-badge estatus-${escapeHtml(m.Estatus)}">${escapeHtml(m.Estatus)}</span></td>
       <td>
         <div style="display:flex;gap:4px">
-          ${m.Estatus === 'Pendiente' ? `
+          ${m.Estatus === 'Pendiente' && (m.CreadoPor === currentUser || currentRol === 'Admin') ? `
           <button class="btn-edit" title="Continuar llenando" style="color:var(--primary)"
             onclick="resumeMantto(${m.IdManten})">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>
@@ -1090,7 +1222,7 @@ async function openManttoDetail(id) {
 }
 
 function renderManttoDetail(m) {
-  const img = m._img;
+  const img = m._img || null;
   const imgSrc = img ? resolveImgSrc(img.IdStorage) : null;
 
   const claseLabel = {

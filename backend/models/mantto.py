@@ -20,13 +20,9 @@ def _fmt(rows, keys):
 PAGE_SIZE = 100
 
 
-def get_all(search=None, estatus=None, is_admin=False, offset=0, limit=None):
+def get_all(search=None, estatus=None, offset=0, limit=None):
     wheres, params = [], []
     has_filters = bool(search or estatus)
-
-    if not is_admin:
-        wheres.append("Estatus = 'Finalizado'")
-        estatus = None
 
     if search:
         wheres.append("(CAST(CodHer AS VARCHAR) LIKE ? OR CreadoPor LIKE ? OR Adicionales LIKE ?)")
@@ -93,15 +89,17 @@ def next_repeticion(tipo, cod, version, pieza):
 
 
 def create(tipo, cod, version, pieza, creado_por, tipo_mant='', adicionales=''):
-    """Crea un nuevo ManttoHead de forma atómica (calcula Repeticion + INSERT en un statement)."""
+    """Crea un nuevo ManttoHead. Repeticion = Repeticion del inventario (ingresada manualmente)."""
+    from backend.models.inventario import TABLE as INV_TABLE
     rows = execute_returning(
         f"""INSERT INTO dbo.[{HEAD}]
                 (Tipo, CodHer, Version, Pieza, Repeticion, Estatus,
                  TipoMant, CreadoPor, Adicionales, FechaCreateMant)
             OUTPUT INSERTED.IdManten
             SELECT ?,?,?,?,
-                   ISNULL((SELECT MAX(Repeticion) FROM dbo.[{HEAD}]
-                            WHERE Tipo=? AND CodHer=? AND Version=? AND Pieza=?), 0) + 1,
+                   ISNULL((SELECT TOP 1 Repeticion FROM dbo.[{INV_TABLE}]
+                            WHERE Tipo=? AND CodMolde=? AND Version=? AND Pieza=?
+                              AND (Activo IS NULL OR Activo=1)), 0),
                    'Pendiente',?,?,?,GETDATE()""",
         [tipo, cod, version, pieza,
          tipo, cod, version, pieza,
@@ -111,8 +109,8 @@ def create(tipo, cod, version, pieza, creado_por, tipo_mant='', adicionales=''):
 
 
 def update_head(id_mant, fields: dict):
-    allowed = {'TipoMant', 'EstadoPostes', 'Observaciones', 'Entrega',
-               'Recibe', 'Estatus', 'Adicionales'}
+    allowed = {'TipoMant', 'EstadoPostes', 'PatronReferencia', 'Observaciones',
+               'Entrega', 'Recibe', 'Estatus', 'Adicionales'}
     sets, params = [], []
     for k, v in fields.items():
         if k in allowed:

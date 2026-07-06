@@ -272,7 +272,7 @@ def list_manttos():
     estatus = request.args.get('estatus', '').strip()
     offset  = int(request.args.get('offset', 0))
     rows, total, has_filters = get_all(
-        search or None, estatus or None, is_admin(),
+        search or None, estatus or None,
         offset=offset, limit=PAGE_SIZE
     )
     return jsonify({
@@ -335,14 +335,26 @@ def create_mantto():
 @login_required
 def update_mantto(id_mant):
     body = request.get_json(silent=True) or {}
-    MAX_LEN = {'TipoMant': 100, 'EstadoPostes': 100, 'Observaciones': 2000,
-               'Entrega': 100, 'Recibe': 100, 'Estatus': 50, 'Adicionales': 500}
+    from backend.models.mantto import update_head, get_by_id
+    m = get_by_id(id_mant)
+    if not m:
+        return jsonify({'error': 'No encontrado'}), 404
+    if m.get('Estatus') == 'Pendiente' and not is_admin():
+        if m.get('CreadoPor') != session.get('mant_username'):
+            return jsonify({'error': 'Solo puedes modificar tus propios mantenimientos'}), 403
+    MAX_LEN = {'TipoMant': 100, 'EstadoPostes': 100, 'PatronReferencia': 100,
+               'Observaciones': 2000, 'Entrega': 100, 'Recibe': 100,
+               'Estatus': 50, 'Adicionales': 500}
     for field, max_len in MAX_LEN.items():
         val = body.get(field)
         if val and isinstance(val, str) and len(val) > max_len:
             return jsonify({'error': f'{field} excede longitud máxima ({max_len})'}), 400
-    from backend.models.mantto import update_head
     update_head(id_mant, body)
+    if body.get('Estatus') == 'Finalizado':
+        from backend.models.inventario import increment_usos
+        m = get_by_id(id_mant)
+        if m:
+            increment_usos(m['Tipo'], m['CodHer'], m['Version'], m['Pieza'])
     return jsonify({'ok': True})
 
 
@@ -362,6 +374,11 @@ def upsert_mantto_detail(id_mant):
 @bp.route('/manttos/<int:id_mant>/details/batch', methods=['PUT'])
 @login_required
 def upsert_mantto_details_batch(id_mant):
+    from backend.models.mantto import get_by_id as _get
+    m = _get(id_mant)
+    if m and m.get('Estatus') == 'Pendiente' and not is_admin():
+        if m.get('CreadoPor') != session.get('mant_username'):
+            return jsonify({'error': 'Solo puedes modificar tus propios mantenimientos'}), 403
     body      = request.get_json() or {}
     items     = body.get('items', [])
     matricero = session.get('mant_username', '')

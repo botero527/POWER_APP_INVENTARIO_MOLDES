@@ -95,6 +95,15 @@ def update(id_registro, data, usuario):
     execute(sql, params)
 
 
+def increment_usos(tipo, cod, version, pieza):
+    """Suma 1 a Usos del herramental cuando se finaliza un mantenimiento."""
+    execute(
+        f"UPDATE dbo.[{TABLE}] SET Usos = ISNULL(Usos, 0) + 1 "
+        f"WHERE Tipo=? AND CodMolde=? AND Version=? AND Pieza=? AND (Activo IS NULL OR Activo=1)",
+        [tipo, cod, version, pieza]
+    )
+
+
 def soft_delete(id_registro, motivo, usuario):
     """Marca el registro como eliminado sin borrarlo físicamente."""
     execute(

@@ -5,6 +5,13 @@ from backend.models.auth import verify_admin_password
 bp = Blueprint('consultar', __name__, url_prefix='/api/consultar')
 
 
+def _fmt_row(r):
+    for k in ('FechaCreacion', 'FechaEdicion', 'FechaEliminacion'):
+        if r.get(k) and hasattr(r[k], 'strftime'):
+            r[k] = r[k].strftime('%d/%m/%Y')
+    return r
+
+
 @bp.route('/items', methods=['GET'])
 def list_items():
     filters = {
@@ -17,6 +24,7 @@ def list_items():
     offset = int(request.args.get('offset', 0))
 
     rows, total, has_filters = get_all(filters, offset=offset, limit=PAGE_SIZE)
+    rows = [_fmt_row(r) for r in rows]
     has_more = (not has_filters) and (offset + len(rows) < total)
     return jsonify({'data': rows, 'total': total, 'has_more': has_more, 'offset': offset})
 
@@ -26,7 +34,7 @@ def get_item(id_registro):
     item = get_by_id(id_registro)
     if not item:
         return jsonify({'error': 'No encontrado'}), 404
-    return jsonify(item)
+    return jsonify(_fmt_row(item))
 
 
 @bp.route('/verify-password', methods=['POST'])

@@ -13,10 +13,21 @@ def parse_nombre(nombre):
     }
 
 
+def _pad3(val):
+    """Normaliza version/pieza a 3 dígitos igual que normalizarCodImg() en JS.
+    '23' → '023', '3' → '003', texto no numérico → se usa tal cual."""
+    if not val:
+        return 'XXX'
+    try:
+        return str(int(val)).zfill(3)
+    except (ValueError, TypeError):
+        return val  # valor alfanumérico como '00/1840009' → se deja igual
+
+
 def build_nombre(tipo, cod, version, pieza):
-    cod_val     = cod     if cod     else 'XXXX'
-    version_val = version if version else 'XXX'
-    pieza_val   = pieza   if pieza   else 'XXX'
+    cod_val     = cod if cod else 'XXXX'
+    version_val = _pad3(version) if version else 'XXX'
+    pieza_val   = _pad3(pieza)   if pieza   else 'XXX'
     return f"{tipo}|{cod_val}|{version_val}|{pieza_val}"
 
 
@@ -46,15 +57,17 @@ def find_for_tool(tipo, cod, version, pieza):
     Busca la imagen más específica en una sola query usando CASE para prioridad.
     Wildcards: XXXX (cod), XXX (version/pieza).
     """
+    version = _pad3(version)
+    pieza   = _pad3(pieza)
     candidates = [
-        f"{tipo}|{cod}|{version}|{pieza}",    # 8 puntos — más específico
-        f"{tipo}|{cod}|{version}|XXX",          # 7
-        f"{tipo}|{cod}|XXX|{pieza}",            # 6
-        f"{tipo}|XXXX|{version}|{pieza}",       # 5
-        f"{tipo}|{cod}|XXX|XXX",                # 4
-        f"{tipo}|XXXX|{version}|XXX",           # 3
-        f"{tipo}|XXXX|XXX|{pieza}",             # 2
-        f"{tipo}|XXXX|XXX|XXX",                 # 1 — más genérico
+        f"{tipo}|{cod}|{version}|{pieza}",  # exacto
+        f"{tipo}|{cod}|{version}|XXX",       # misma versión, cualquier pieza
+        f"{tipo}|{cod}|XXX|{pieza}",         # cualquier versión, misma pieza
+        f"{tipo}|XXXX|{version}|{pieza}",    # genérica: cualquier cod, misma versión y pieza
+        f"{tipo}|{cod}|XXX|XXX",             # cualquier versión/pieza del mismo molde
+        f"{tipo}|XXXX|{version}|XXX",        # genérica: cualquier cod, misma versión
+        f"{tipo}|XXXX|XXX|{pieza}",          # genérica: cualquier cod, misma pieza
+        f"{tipo}|XXXX|XXX|XXX",              # genérica total
     ]
     placeholders = ','.join(['?'] * len(candidates))
     case_when = ' '.join(
