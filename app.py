@@ -2,6 +2,7 @@ import socket
 import logging
 from functools import wraps
 from flask import Flask, render_template, session, redirect, url_for, request, jsonify
+from werkzeug.exceptions import HTTPException
 from backend.config import SECRET_KEY, DEBUG
 from backend.routes.consultar import bp as consultar_bp
 from backend.routes.mantenimiento import bp as mantenimiento_bp
@@ -16,7 +17,8 @@ app = Flask(
 app.secret_key = SECRET_KEY
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = not DEBUG
+# SECURE solo cuando haya HTTPS — mientras se corre en HTTP, debe ser False
+app.config['SESSION_COOKIE_SECURE'] = False
 
 limiter.init_app(app)
 
@@ -27,8 +29,16 @@ app.register_blueprint(mantenimiento_bp)
 app.teardown_appcontext(close_request_connection)
 
 
+@app.errorhandler(HTTPException)
+def handle_http_error(e):
+    # 404, 405, etc. son errores esperados — solo debug, no exception traceback
+    app.logger.debug('HTTP %s: %s', e.code, request.path)
+    return jsonify({'error': e.description}), e.code
+
+
 @app.errorhandler(Exception)
 def handle_unexpected_error(e):
+    # Solo errores reales (500) merecen traceback completo
     app.logger.exception('Error no manejado: %s', str(e))
     return jsonify({'error': 'Error interno del servidor. Intentalo nuevamente.'}), 500
 

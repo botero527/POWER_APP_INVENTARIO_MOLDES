@@ -4,8 +4,9 @@ function padField(val, digits) {
   const s = String(val).trim();
   return /^\d+$/.test(s) ? s.padStart(digits, '0') : s;
 }
-const padCod   = v => padField(v, 4);
-const padPieza = v => padField(v, 3);
+const padCod     = v => padField(v, 4);
+const padPieza   = v => padField(v, 3);
+const padVersion = v => padField(v, 3);
 
 /* ── STATE ─────────────────────────────────────────────────── */
 let editTarget    = null;
@@ -20,6 +21,8 @@ let allUsers      = [];
 let _loadImgInFlight      = false;
 let _loadUsersInFlight    = false;
 let _loadOpcionesInFlight = false;
+let _tiposValidos         = [];
+let _ubicacionesValidas   = [];
 
 /* ── INIT ──────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -468,10 +471,18 @@ async function deleteUser(id, nombre) {
 
 /* ── OPCIONES (tipos / ubicaciones) ────────────────────────── */
 async function loadOpciones() {
-  const data = await api('/api/consultar/opciones');
+  const [data, tiposExistentes] = await Promise.all([
+    api('/api/consultar/opciones'),
+    api('/api/consultar/tipos-existentes'),
+  ]);
 
+  // Guardar globalmente para validación de imports (solo tipos configurados como válidos)
+  _tiposValidos       = data.tipos.map(t => t.toUpperCase());
+  _ubicacionesValidas = data.ubicaciones.map(u => u.toUpperCase());
+
+  // Filtro f-tipo: todos los que existen en la BD (incluye histórico)
   const fTipo = document.getElementById('f-tipo');
-  data.tipos.forEach(t => {
+  tiposExistentes.forEach(t => {
     fTipo.insertAdjacentHTML('beforeend', `<option value="${t}">${t}</option>`);
   });
 
@@ -489,6 +500,15 @@ async function loadOpciones() {
   data.ubicaciones.forEach(u => {
     formUbic.insertAdjacentHTML('beforeend', `<option value="${u}">${u}</option>`);
   });
+
+  // Actualizar instrucciones del import con valores reales de la BD
+  const guideHint = document.getElementById('import-guide-hint');
+  if (guideHint) {
+    guideHint.innerHTML =
+      `<b>Tipo:</b> ${_tiposValidos.join(' / ')} &nbsp;·&nbsp; ` +
+      `<b>Ubicación:</b> ${_ubicacionesValidas.join(' / ')} &nbsp;·&nbsp; ` +
+      `Los campos opcionales pueden ir vacíos pero la columna debe existir.`;
+  }
 }
 
 /* ── TABLA ─────────────────────────────────────────────────── */
@@ -496,7 +516,7 @@ function getActiveFilters() {
   return {
     tipo:      document.getElementById('f-tipo').value,
     cod_molde: padCod(document.getElementById('f-cod-molde').value.trim()),
-    version:   document.getElementById('f-version').value.trim(),
+    version:   padVersion(document.getElementById('f-version').value.trim()),
     pieza:     padPieza(document.getElementById('f-pieza').value.trim()),
   };
 }
@@ -676,117 +696,215 @@ let _importRows = [];
 
 function openImportModal() {
   _importRows = [];
-  document.getElementById('import-paste-area').value = '';
   document.getElementById('import-parse-error').classList.add('hidden');
-  document.getElementById('import-instructions').classList.remove('hidden');
-  document.getElementById('import-result').classList.add('hidden');
-  document.getElementById('btn-import-validate').style.display = '';
+  document.getElementById('import-summary').innerHTML = '';
   document.getElementById('btn-import-confirm').classList.add('hidden');
   document.getElementById('modal-import').classList.remove('hidden');
-  setTimeout(() => document.getElementById('import-paste-area').focus(), 50);
+  _renderImportGrid([]);
+  const tbl = document.getElementById('import-excel-table');
+  tbl.removeEventListener('paste', _onGridPaste);
+  tbl.addEventListener('paste', _onGridPaste);
 }
 
 function closeImportModal() {
   document.getElementById('modal-import').classList.add('hidden');
 }
 
-function parsePaste(raw) {
-  const lines = raw.trim().split(/\r?\n/).filter(l => l.trim());
-  return lines.map(line => {
+function _buildGridRow(idx, d, status) {
+  const cols = IMPORT_COLS;
+  const cells = cols.map(col =>
+    `<td contenteditable="true" data-col="${col}" data-row="${idx}" class="import-cell" onblur="onImportCellEdit(this)">${escapeHtml(d[col] ?? '')}</td>`
+  ).join('');
+  let st;
+  if (status === 'ok')
+    st = `<td class="import-st import-st-ok">✓ ${escapeHtml(d._img?.Nombre_Imagen ?? '')}</td>`;
+  else if (status === 'err')
+    st = `<td class="import-st import-st-err">✗ ${escapeHtml(d._err ?? '')}<br><button onclick="revalidateRow(${idx})" class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 7px;margin-top:3px">Re-validar</button></td>`;
+  else
+    st = `<td class="import-st import-st-pending">—</td>`;
+  return `<tr class="${status === 'ok' ? 'import-row-ok' : status === 'err' ? 'import-row-err' : ''}" id="import-tr-${idx}">
+    <td class="import-rn">${idx + 1}</td>${cells}${st}
+  </tr>`;
+}
+
+function _renderImportGrid(dataRows) {
+  const count = Math.max(dataRows.length, 6);
+  document.getElementById('import-excel-body').innerHTML =
+    Array.from({length: count}, (_, i) => _buildGridRow(i, dataRows[i] || {}, null)).join('');
+}
+
+function _onGridPaste(e) {
+  e.preventDefault();
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  if (!text.trim()) return;
+  const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+  const parsed = lines.map(line => {
     const cells = line.split('\t').map(c => c.trim());
     const obj = {};
     IMPORT_COLS.forEach((col, i) => { obj[col] = cells[i] ?? ''; });
     obj.tipo      = obj.tipo.toUpperCase().trim();
     obj.ubicacion = obj.ubicacion.toUpperCase().trim();
     obj.cod_molde = padCod(obj.cod_molde);
+    obj.version   = padVersion(obj.version);
     obj.pieza     = padPieza(obj.pieza);
     return obj;
   });
+  _importRows = parsed.map((r, i) => ({...r, _idx: i, _img: null, _err: null}));
+  _renderImportGrid(parsed);
+  document.getElementById('import-summary').innerHTML =
+    `<span style="color:var(--text-muted)">${parsed.length} fila${parsed.length !== 1 ? 's' : ''} pegadas — presiona <b>Validar filas</b> para verificar</span>`;
+  document.getElementById('btn-import-confirm').classList.add('hidden');
+  document.getElementById('import-parse-error').classList.add('hidden');
+  // re-attach paste after re-render
+  const tbl = document.getElementById('import-excel-table');
+  tbl.removeEventListener('paste', _onGridPaste);
+  tbl.addEventListener('paste', _onGridPaste);
 }
 
 async function validateImportRows() {
-  const raw = document.getElementById('import-paste-area').value;
   const errEl = document.getElementById('import-parse-error');
   errEl.classList.add('hidden');
 
-  if (!raw.trim()) {
-    errEl.textContent = 'Pega datos desde Excel primero.';
+  // leer filas actuales del grid
+  const trs = [...document.querySelectorAll('#import-excel-body tr[id^="import-tr-"]')];
+  const rows = trs.map((tr, i) => {
+    const obj = { _idx: i };
+    tr.querySelectorAll('td[data-col]').forEach(td => { obj[td.dataset.col] = td.textContent.trim(); });
+    return obj;
+  }).filter(r => (r.tipo || '').trim() || (r.cod_molde || '').trim());
+
+  if (!rows.length) {
+    errEl.textContent = 'Pega datos desde Excel primero (Ctrl+V sobre la tabla).';
     errEl.classList.remove('hidden');
     return;
   }
 
-  const rows = parsePaste(raw);
-  if (!rows.length) {
-    errEl.textContent = 'No se encontraron filas válidas.';
-    errEl.classList.remove('hidden');
-    return;
-  }
+  // normalizar
+  rows.forEach(r => {
+    r.tipo      = (r.tipo || '').toUpperCase().trim();
+    r.ubicacion = (r.ubicacion || '').toUpperCase().trim();
+    r.cod_molde = padCod(r.cod_molde || '');
+    r.version   = padVersion(r.version || '');
+    r.pieza     = padPieza(r.pieza || '');
+  });
 
   const btn = document.getElementById('btn-import-validate');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Validando...';
 
-  // Validar imagen de cada fila en paralelo
-  const checked = await Promise.all(rows.map(async (row, i) => {
-    if (!row.tipo || !row.cod_molde) return { ...row, _idx: i, _img: null, _err: 'Tipo o CodMolde vacío' };
+  const checked = await Promise.all(rows.map(async row => {
+    const i = row._idx;
+    if (!row.tipo || !row.cod_molde) return { ...row, _img: null, _err: 'Tipo o CodMolde vacío' };
+    if (_tiposValidos.length && !_tiposValidos.includes(row.tipo))
+      return { ...row, _img: null, _err: `Tipo "${row.tipo}" no válido. Aceptados: ${_tiposValidos.join(', ')}` };
+    if (row.ubicacion && _ubicacionesValidas.length && !_ubicacionesValidas.includes(row.ubicacion))
+      return { ...row, _img: null, _err: `Ubicación "${row.ubicacion}" no válida. Aceptadas: ${_ubicacionesValidas.join(', ')}` };
+    if (row.cod_molde.length > 4) return { ...row, _img: null, _err: `CodMolde supera 4 dígitos` };
+    if (row.pieza && row.pieza.length > 3) return { ...row, _img: null, _err: `Pieza supera 3 dígitos` };
     const params = new URLSearchParams({ tipo: row.tipo, cod: row.cod_molde });
     if (row.version) params.set('version', row.version);
     if (row.pieza)   params.set('pieza', row.pieza);
     try {
       const img = await fetch(`/api/mantenimiento/imagenes/buscar?${params}`)
         .then(r => r.ok ? r.json() : null).catch(() => null);
-      return { ...row, _idx: i, _img: img, _err: img ? null : 'Sin imagen' };
+      return { ...row, _img: img, _err: img ? null : 'Sin imagen asociada' };
     } catch {
-      return { ...row, _idx: i, _img: null, _err: 'Error al verificar' };
+      return { ...row, _img: null, _err: 'Error al verificar' };
     }
   }));
 
   _importRows = checked;
-  renderImportPreview(checked);
+  checked.forEach(r => _updateGridRowStatus(r));
+  updateImportSummary();
 
   btn.disabled = false;
   btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Validar filas';
 }
 
-function resetImportView() {
-  document.getElementById('import-instructions').classList.remove('hidden');
-  document.getElementById('import-result').classList.add('hidden');
-  document.getElementById('btn-import-validate').style.display = '';
-  document.getElementById('btn-import-confirm').classList.add('hidden');
-  setTimeout(() => document.getElementById('import-paste-area').focus(), 50);
+function _updateGridRowStatus(row) {
+  const tr = document.getElementById(`import-tr-${row._idx}`);
+  if (!tr) return;
+  const isOk = !!row._img;
+  tr.className = isOk ? 'import-row-ok' : 'import-row-err';
+  const st = tr.querySelector('.import-st');
+  if (!st) return;
+  if (isOk) {
+    st.className = 'import-st import-st-ok';
+    st.innerHTML = `✓ ${escapeHtml(row._img.Nombre_Imagen)}`;
+  } else {
+    st.className = 'import-st import-st-err';
+    st.innerHTML = `✗ ${escapeHtml(row._err)}<br><button onclick="revalidateRow(${row._idx})" class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 7px;margin-top:3px">Re-validar</button>`;
+  }
 }
 
-function renderImportPreview(rows) {
-  const valid = rows.filter(r => r._img);
-  const tbody = document.getElementById('import-preview-body');
-
-  tbody.innerHTML = rows.map(r => `
-    <tr class="${r._img ? 'import-row-ok' : 'import-row-err'}">
-      <td style="text-align:center;font-weight:700;color:var(--text-muted)">${r._idx + 1}</td>
-      <td>${escapeHtml(r.tipo)}</td>
-      <td>${escapeHtml(r.cod_molde)}</td>
-      <td>${escapeHtml(r.version)}</td>
-      <td>${escapeHtml(r.pieza)}</td>
-      <td>${escapeHtml(r.vehiculo)}</td>
-      <td>${escapeHtml(r.lote)}</td>
-      <td>${escapeHtml(r.repeticion)}</td>
-      <td>${escapeHtml(r.ubicacion)}</td>
-      <td>${escapeHtml(r.puesto)}</td>
-      <td>${r._img
-        ? `<span class="import-status-ok">✓ ${escapeHtml(r._img.Nombre_Imagen)}</span>`
-        : `<span class="import-status-err">✗ ${escapeHtml(r._err)}</span>`}</td>
-    </tr>`).join('');
-
+function updateImportSummary() {
+  const valid = _importRows.filter(r => r._img);
+  const invalid = _importRows.length - valid.length;
   const summary = document.getElementById('import-summary');
-  summary.innerHTML = valid.length
-    ? `<span style="color:#2e9e5b">✓ ${valid.length} fila${valid.length > 1 ? 's' : ''} con imagen</span>`
-      + (rows.length - valid.length ? `&nbsp;&nbsp;<span style="color:var(--danger)">✗ ${rows.length - valid.length} sin imagen (se omitirán)</span>` : '')
-    : `<span style="color:var(--danger)">✗ Ninguna fila tiene imagen asociada — no se puede importar.</span>`;
-  summary.innerHTML += `&nbsp;&nbsp;<button onclick="resetImportView()" style="font-size:12px;background:none;border:none;color:var(--primary);cursor:pointer;text-decoration:underline">← Volver a pegar</button>`;
-
-  document.getElementById('import-instructions').classList.add('hidden');
-  document.getElementById('import-result').classList.remove('hidden');
+  if (!valid.length) {
+    summary.innerHTML = `<span style="color:var(--danger)">✗ Ninguna fila tiene imagen asociada — no se puede importar.</span>`;
+  } else {
+    summary.innerHTML = `<span style="color:#2e9e5b">✓ ${valid.length} fila${valid.length > 1 ? 's' : ''} listas para importar</span>`
+      + (invalid ? `&nbsp;&nbsp;<span style="color:var(--danger)">✗ ${invalid} se omitirán (sin imagen)</span>` : '');
+  }
   document.getElementById('btn-import-confirm').classList.toggle('hidden', valid.length === 0);
+}
+
+function onImportCellEdit(td) {
+  const idx = parseInt(td.dataset.row);
+  const col = td.dataset.col;
+  let val = td.textContent.trim();
+  if (col === 'tipo' || col === 'ubicacion') val = val.toUpperCase();
+  if (col === 'cod_molde') val = padCod(val);
+  if (col === 'version')   val = padVersion(val);
+  if (col === 'pieza')     val = padPieza(val);
+  td.textContent = val;
+  _importRows[idx][col] = val;
+}
+
+async function revalidateRow(idx) {
+  const row = _importRows[idx];
+  const tr  = document.getElementById(`import-tr-${idx}`);
+  if (!tr) return;
+
+  const st = tr.querySelector('.import-st');
+  if (st) st.innerHTML = '<span class="spinner"></span>';
+
+  // re-leer celdas
+  tr.querySelectorAll('td[data-col]').forEach(td => {
+    let val = td.textContent.trim();
+    if (td.dataset.col === 'tipo' || td.dataset.col === 'ubicacion') val = val.toUpperCase();
+    if (td.dataset.col === 'cod_molde') val = padCod(val);
+    if (td.dataset.col === 'version')   val = padVersion(val);
+    if (td.dataset.col === 'pieza')     val = padPieza(val);
+    td.textContent = val;
+    row[td.dataset.col] = val;
+  });
+
+  let err = null;
+  if (!row.tipo || !row.cod_molde) err = 'Tipo o CodMolde vacío';
+  else if (_tiposValidos.length && !_tiposValidos.includes(row.tipo))
+    err = `Tipo "${row.tipo}" no válido. Aceptados: ${_tiposValidos.join(', ')}`;
+  else if (row.ubicacion && _ubicacionesValidas.length && !_ubicacionesValidas.includes(row.ubicacion))
+    err = `Ubicación "${row.ubicacion}" no válida. Aceptadas: ${_ubicacionesValidas.join(', ')}`;
+  else if (row.cod_molde.length > 4) err = `CodMolde supera 4 dígitos`;
+  else if (row.pieza && row.pieza.length > 3) err = `Pieza supera 3 dígitos`;
+
+  if (!err) {
+    const params = new URLSearchParams({ tipo: row.tipo, cod: row.cod_molde });
+    if (row.version) params.set('version', row.version);
+    if (row.pieza)   params.set('pieza', row.pieza);
+    const img = await fetch(`/api/mantenimiento/imagenes/buscar?${params}`)
+      .then(r => r.ok ? r.json() : null).catch(() => null);
+    row._img = img;
+    row._err = img ? null : 'Sin imagen asociada';
+  } else {
+    row._img = null;
+    row._err = err;
+  }
+
+  _updateGridRowStatus(row);
+  updateImportSummary();
 }
 
 async function confirmImport() {
@@ -857,8 +975,18 @@ function bindButtons() {
     el.addEventListener('input',  () => { clearTimeout(imgCheckTimer); imgCheckTimer = setTimeout(checkImgStatus, 600); });
     el.addEventListener('change', () => { clearTimeout(imgCheckTimer); imgCheckTimer = setTimeout(checkImgStatus, 300); });
     el.addEventListener('blur',   () => {
-      if (id === 'form-cod-molde') el.value = padCod(el.value.trim());
-      if (id === 'form-pieza')     el.value = padPieza(el.value.trim());
+      if (id === 'form-cod-molde') {
+        el.value = padCod(el.value.trim());
+        if (el.value.length > 4) toast(`CodMolde "${el.value}" supera 4 dígitos permitidos`, 'error');
+      }
+      if (id === 'form-version') {
+        el.value = padVersion(el.value.trim());
+        if (el.value.length > 3) toast(`Versión "${el.value}" supera 3 dígitos permitidos`, 'error');
+      }
+      if (id === 'form-pieza') {
+        el.value = padPieza(el.value.trim());
+        if (el.value.length > 3) toast(`Pieza "${el.value}" supera 3 dígitos permitidos`, 'error');
+      }
       clearTimeout(imgCheckTimer); imgCheckTimer = setTimeout(checkImgStatus, 200);
     });
   });
@@ -1032,6 +1160,15 @@ async function saveForm() {
     ubicacion:   document.getElementById('form-ubicacion').value,
     puesto:      document.getElementById('form-puesto').value.trim(),
   };
+
+  if (data.cod_molde.length > 4) {
+    toast(`CodMolde "${data.cod_molde}" supera 4 dígitos permitidos`, 'error');
+    return;
+  }
+  if (data.pieza && data.pieza.length > 3) {
+    toast(`Pieza "${data.pieza}" supera 3 dígitos permitidos`, 'error');
+    return;
+  }
 
   const id = document.getElementById('form-id').value;
   const btn = document.getElementById('btn-save-form');

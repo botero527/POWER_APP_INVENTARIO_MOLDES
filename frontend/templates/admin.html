@@ -370,47 +370,43 @@
       <h3>Importar desde Excel</h3>
       <button class="modal-close" id="btn-close-import">&times;</button>
     </div>
-    <div class="modal-body">
+    <div class="modal-body" style="padding-bottom:8px">
 
-      <!-- instrucciones -->
-      <div id="import-instructions">
-        <p style="margin-bottom:10px">Copia las filas directamente desde Excel y pégalas abajo. Las columnas deben estar en este orden:</p>
-        <div class="import-col-guide">
-          <span>1. Tipo</span><span>2. CodMolde</span><span>3. Versión</span><span>4. Pieza</span>
-          <span>5. Vehículo</span><span>6. Lote</span><span>7. Repetición</span><span>8. Ubicación</span>
-          <span>9. Puesto</span>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px;flex-wrap:wrap">
+        <div>
+          <div class="import-col-guide">
+            <span>1. Tipo</span><span>2. CodMolde</span><span>3. Versión</span><span>4. Pieza</span>
+            <span>5. Vehículo</span><span>6. Lote</span><span>7. Repetición</span><span>8. Ubicación</span>
+            <span>9. Puesto</span>
+          </div>
+          <p id="import-guide-hint" style="margin-top:6px;font-size:11px;color:var(--text-muted)">
+            <b>Tipo:</b> M / G &nbsp;·&nbsp; <b>Ubicación:</b> HORNOS / MATRICERIA / MEZANINE / PARQUEADERO / B10 / B15
+          </p>
         </div>
-        <p style="margin-top:8px;font-size:12px;color:var(--text-muted)">
-          <b>Tipo:</b> M o G &nbsp;·&nbsp; <b>Ubicación:</b> HORNOS / MATRICERIA / MEZANINE / PARQUEADERO / B10 / B15 &nbsp;·&nbsp; Los campos opcionales pueden ir vacíos pero la columna debe existir.
-        </p>
-        <textarea id="import-paste-area" rows="6"
-          placeholder="Pega aquí las filas copiadas desde Excel (Ctrl+V)..."
-          style="width:100%;margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:monospace;font-size:12px;resize:vertical;background:var(--bg)"></textarea>
-        <p class="error-msg hidden" id="import-parse-error"></p>
+        <p style="font-size:12px;color:var(--text-muted);white-space:nowrap;padding-top:2px">Pega con <kbd style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:11px">Ctrl+V</kbd> sobre la tabla</p>
       </div>
 
-      <!-- resultado validación -->
-      <div id="import-result" class="hidden">
-        <div id="import-summary" style="margin-bottom:12px;font-size:13px;font-weight:600"></div>
-        <div style="overflow-x:auto;max-height:320px;overflow-y:auto">
-          <table class="data-table" id="import-preview-table">
-            <thead>
-              <tr>
-                <th></th>
-                <th>Tipo</th><th>CodMolde</th><th>Versión</th><th>Pieza</th>
-                <th>Vehículo</th><th>Lote</th><th>Rep.</th><th>Ubicación</th><th>Puesto</th>
-                <th>Imagen</th>
-              </tr>
-            </thead>
-            <tbody id="import-preview-body"></tbody>
-          </table>
-        </div>
+      <p class="error-msg hidden" id="import-parse-error" style="margin-bottom:8px"></p>
+      <div id="import-summary" style="margin-bottom:8px;font-size:13px;font-weight:600;min-height:18px"></div>
+
+      <div class="import-excel-wrap">
+        <table id="import-excel-table" class="import-excel-table">
+          <thead>
+            <tr>
+              <th class="import-rn">#</th>
+              <th>TIPO</th><th>CODMOLDE</th><th>VERSIÓN</th><th>PIEZA</th>
+              <th>VEHÍCULO</th><th>LOTE</th><th>REP.</th><th>UBICACIÓN</th><th>PUESTO</th>
+              <th class="import-st-th">ESTADO</th>
+            </tr>
+          </thead>
+          <tbody id="import-excel-body"></tbody>
+        </table>
       </div>
 
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" id="btn-cancel-import">Cancelar</button>
-      <button class="btn btn-outline" id="btn-import-validate" style="display:none">
+      <button class="btn btn-outline" id="btn-import-validate">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Validar filas
       </button>

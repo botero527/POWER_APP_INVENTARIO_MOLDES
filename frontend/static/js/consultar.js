@@ -11,9 +11,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 /* ── OPCIONES (tipos) ───────────────────────────────────────── */
 async function loadOpciones() {
-  const data = await api('/api/consultar/opciones');
+  const tipos = await api('/api/consultar/tipos-existentes');
   const fTipo = document.getElementById('f-tipo');
-  data.tipos.forEach(t => {
+  tipos.forEach(t => {
     fTipo.insertAdjacentHTML('beforeend', `<option value="${t}">${t}</option>`);
   });
 }

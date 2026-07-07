@@ -1,3 +1,4 @@
+import re
 from backend.db import query, execute, execute_returning, execute_multi
 
 HEAD = 'AppControlInventarios_ManttoHead'
@@ -7,6 +8,22 @@ CLASE_LABELS = {
     'MedidaTolerancia_Mantenimiento': 'Mediciones de Tolerancia',
     'EspesorPista_Mantenimiento':     'Espesor de Pista',
 }
+
+
+def _pad(val, digits):
+    if not val:
+        return val
+    s = str(val).strip()
+    return s.zfill(digits) if re.fullmatch(r'\d+', s) else s
+
+
+def _normalize_row(row):
+    """Normaliza CodHer/Pieza/Version al leer desde BD sin modificarla."""
+    if row:
+        row['CodHer']  = _pad(row.get('CodHer'), 4)
+        row['Pieza']   = _pad(row.get('Pieza'), 3)
+        row['Version'] = _pad(row.get('Version'), 3)
+    return row
 
 
 def _fmt(rows, keys):
@@ -25,8 +42,17 @@ def get_all(search=None, estatus=None, offset=0, limit=None):
     has_filters = bool(search or estatus)
 
     if search:
-        wheres.append("(CAST(CodHer AS VARCHAR) LIKE ? OR CreadoPor LIKE ? OR Adicionales LIKE ?)")
-        params += [f'%{search}%', f'%{search}%', f'%{search}%']
+        s = search.strip()
+        if re.fullmatch(r'\d+', s):
+            # Búsqueda numérica: compara valor entero para encontrar '831' buscando '0831' y viceversa
+            wheres.append(
+                "(ISNUMERIC(CodHer) = 1 AND CAST(CodHer AS INT) = TRY_CAST(? AS INT) "
+                "OR CreadoPor LIKE ? OR Adicionales LIKE ?)"
+            )
+            params += [s, f'%{s}%', f'%{s}%']
+        else:
+            wheres.append("(CAST(CodHer AS VARCHAR) LIKE ? OR CreadoPor LIKE ? OR Adicionales LIKE ?)")
+            params += [f'%{s}%', f'%{s}%', f'%{s}%']
 
     if estatus:
         wheres.append("Estatus = ?")
@@ -44,6 +70,7 @@ def get_all(search=None, estatus=None, offset=0, limit=None):
         params + [offset, limit or PAGE_SIZE]
     )
 
+    rows = [_normalize_row(r) for r in rows]
     return _fmt(rows, ['FechaCreateMant', 'FechaReleaseMant']), total, has_filters
 
 
@@ -51,7 +78,7 @@ def get_by_id(id_mant):
     rows = query(f"SELECT * FROM dbo.[{HEAD}] WHERE IdManten = ?", [id_mant])
     if not rows:
         return None
-    head = rows[0]
+    head = _normalize_row(rows[0])
     _fmt([head], ['FechaCreateMant', 'FechaReleaseMant'])
 
     details = query(
@@ -74,16 +101,22 @@ def get_by_id(id_mant):
 
 def next_repeticion(tipo, cod, version, pieza):
     """Retorna el siguiente número de repetición para un herramental."""
+    cod   = _pad(cod, 4)
+    pieza = _pad(pieza, 3)
     rows = query(
         f"SELECT ISNULL(MAX(Repeticion), 0) + 1 AS next_rep FROM dbo.[{HEAD}] "
-        f"WHERE Tipo=? AND CodHer=? AND Version=? AND Pieza=?",
-        [tipo, cod, version, pieza]
+        f"WHERE Tipo=? AND (CodHer=? OR (ISNUMERIC(CodHer)=1 AND CAST(CodHer AS INT)=TRY_CAST(? AS INT))) "
+        f"AND Version=? "
+        f"AND (Pieza=? OR (ISNUMERIC(Pieza)=1 AND CAST(Pieza AS INT)=TRY_CAST(? AS INT)))",
+        [tipo, cod, cod, version, pieza, pieza]
     )
     return rows[0]['next_rep'] if rows else 1
 
 
 def create(tipo, cod, version, pieza, creado_por, tipo_mant='', adicionales=''):
     """Crea un nuevo ManttoHead. Repeticion = Repeticion del inventario (ingresada manualmente)."""
+    cod   = _pad(cod, 4)
+    pieza = _pad(pieza, 3)
     from backend.models.inventario import TABLE as INV_TABLE
     rows = execute_returning(
         f"""INSERT INTO dbo.[{HEAD}]
@@ -92,11 +125,12 @@ def create(tipo, cod, version, pieza, creado_por, tipo_mant='', adicionales=''):
             OUTPUT INSERTED.IdManten
             SELECT ?,?,?,?,
                    ISNULL((SELECT TOP 1 Repeticion FROM dbo.[{INV_TABLE}]
-                            WHERE Tipo=? AND CodMolde=? AND Version=? AND Pieza=?
+                            WHERE Tipo=? AND (CodMolde=? OR (ISNUMERIC(CodMolde)=1 AND CAST(CodMolde AS INT)=TRY_CAST(? AS INT)))
+                              AND Version=? AND (Pieza=? OR (ISNUMERIC(Pieza)=1 AND CAST(Pieza AS INT)=TRY_CAST(? AS INT)))
                               AND (Activo IS NULL OR Activo=1)), 0),
                    'Pendiente',?,?,?,GETDATE()""",
         [tipo, cod, version, pieza,
-         tipo, cod, version, pieza,
+         tipo, cod, cod, version, pieza, pieza,
          tipo_mant, creado_por, adicionales]
     )
     return rows[0]['IdManten'] if rows else None

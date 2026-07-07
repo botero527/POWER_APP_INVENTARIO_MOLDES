@@ -14,6 +14,15 @@ def _pad(val, digits):
     return s.zfill(digits) if re.fullmatch(r'\d+', s) else s
 
 
+def _normalize_row(row):
+    """Normaliza CodMolde/Pieza/Version al leer desde BD, sin modificar la BD."""
+    if row:
+        row['CodMolde'] = _pad(row.get('CodMolde'), 4)
+        row['Pieza']    = _pad(row.get('Pieza'), 3)
+        row['Version']  = _pad(row.get('Version'), 3)
+    return row
+
+
 def get_all(filters=None, offset=0, limit=None):
     conditions = []
     params = []
@@ -29,7 +38,7 @@ def get_all(filters=None, offset=0, limit=None):
             if re.fullmatch(r'\d+', v):
                 # Valor numérico: coincide exacto O equivalente numérico (cubre histórico sin padding)
                 conditions.append(
-                    '(CodMolde = ? OR (ISNUMERIC(CodMolde) = 1 AND CAST(CodMolde AS INT) = CAST(? AS INT)))'
+                    '(CodMolde = ? OR (ISNUMERIC(CodMolde) = 1 AND CAST(CodMolde AS INT) = TRY_CAST(? AS INT)))'
                 )
                 params.extend([v, v])
             else:
@@ -37,14 +46,21 @@ def get_all(filters=None, offset=0, limit=None):
                 params.append(f"%{v}%")
             has_filters = True
         if filters.get('version'):
-            conditions.append('Version LIKE ?')
-            params.append(f"%{filters['version']}%")
+            v = _pad(filters['version'], 3)
+            if re.fullmatch(r'\d+', v):
+                conditions.append(
+                    '(Version = ? OR (ISNUMERIC(Version) = 1 AND CAST(Version AS INT) = TRY_CAST(? AS INT)))'
+                )
+                params.extend([v, v])
+            else:
+                conditions.append('Version LIKE ?')
+                params.append(f"%{v}%")
             has_filters = True
         if filters.get('pieza'):
             v = _pad(filters['pieza'], 3)
             if re.fullmatch(r'\d+', v):
                 conditions.append(
-                    '(Pieza = ? OR (ISNUMERIC(Pieza) = 1 AND CAST(Pieza AS INT) = CAST(? AS INT)))'
+                    '(Pieza = ? OR (ISNUMERIC(Pieza) = 1 AND CAST(Pieza AS INT) = TRY_CAST(? AS INT)))'
                 )
                 params.extend([v, v])
             else:
@@ -71,16 +87,35 @@ def get_all(filters=None, offset=0, limit=None):
         f"OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
     )
     rows = query(sql, params + [offset, limit or PAGE_SIZE])
+    rows = [_normalize_row(r) for r in rows]
 
     return rows, total, has_filters
 
 
 def get_by_id(id_registro):
     rows = query(f"SELECT * FROM dbo.[{TABLE}] WHERE IdRegistro = ?", [id_registro])
-    return rows[0] if rows else None
+    return _normalize_row(rows[0]) if rows else None
+
+
+def _validate(data):
+    from backend.models.opciones import get_by_grupo
+    cod   = _pad(data.get('cod_molde') or '', 4)
+    pieza = _pad(data.get('pieza') or '', 3)
+    if len(cod) > 4:
+        raise ValueError(f'CodMolde "{cod}" supera 4 dígitos permitidos')
+    if pieza and len(pieza) > 3:
+        raise ValueError(f'Pieza "{pieza}" supera 3 dígitos permitidos')
+    tipos_validos = [o['valor'].upper() for o in get_by_grupo('tipo_inv')]
+    if tipos_validos and (data.get('tipo') or '').upper() not in tipos_validos:
+        raise ValueError(f'Tipo "{data.get("tipo")}" no válido. Valores aceptados: {", ".join(tipos_validos)}')
+    ubics_validas = [o['valor'].upper() for o in get_by_grupo('ubicacion_inv')]
+    ubic = (data.get('ubicacion') or '').upper()
+    if ubic and ubics_validas and ubic not in ubics_validas:
+        raise ValueError(f'Ubicación "{data.get("ubicacion")}" no válida. Valores aceptados: {", ".join(ubics_validas)}')
 
 
 def create(data, usuario):
+    _validate(data)
     sql = f"""
         INSERT INTO dbo.[{TABLE}]
             (Tipo, CodMolde, Vehiculo, Pieza, Lote, Version, Repeticion,
@@ -97,6 +132,7 @@ def create(data, usuario):
 
 
 def update(id_registro, data, usuario):
+    _validate(data)
     sql = f"""
         UPDATE dbo.[{TABLE}] SET
             Tipo=?, CodMolde=?, Vehiculo=?, Pieza=?, Lote=?, Version=?,

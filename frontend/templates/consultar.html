@@ -10,6 +10,13 @@
 </a>
 {% endblock %}
 
+{% block topbar_right %}
+<div style="display:flex;align-items:center;gap:12px">
+  <a href="/mantenimiento" class="btn btn-outline btn-sm">Ir a Mantenimiento</a>
+  <img src="{{ url_for('static', filename='img/LOGO.png') }}" alt="AGP" class="agp-logo-img" />
+</div>
+{% endblock %}
+
 {% block content %}
 <div class="consultar-layout">
 

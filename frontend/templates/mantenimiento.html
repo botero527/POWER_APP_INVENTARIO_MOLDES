@@ -10,6 +10,13 @@
 </a>
 {% endblock %}
 
+{% block topbar_right %}
+<div style="display:flex;align-items:center;gap:12px">
+  <a href="/consultar" class="btn btn-outline btn-sm">Ir a Inventario</a>
+  <img src="{{ url_for('static', filename='img/LOGO.png') }}" alt="AGP" class="agp-logo-img" />
+</div>
+{% endblock %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/mantenimiento.css') }}" />
 {% endblock %}
@@ -61,15 +68,11 @@
 
   <!-- Header mantto -->
   <div class="mantto-header">
-    <a href="/" class="btn btn-outline btn-sm">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><polyline points="15,18 9,12 15,6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      Inicio
-    </a>
     <h2 class="mantto-title">Registro de Mantenimientos</h2>
     <div style="display:flex;align-items:center;gap:10px">
       <span id="mant-username-label" style="font-size:13px;color:var(--text-muted)"></span>
       <span class="role-badge" id="mant-role-badge"></span>
-      <button class="btn btn-outline btn-sm" id="btn-logout">Salir</button>
+      <button class="btn btn-outline btn-sm" id="btn-logout">Cerrar sesión</button>
       <button class="btn btn-primary btn-sm" id="btn-mantto-add">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
         Nuevo
@@ -149,14 +152,12 @@
       <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
         Filtre y seleccione el herramental al que desea hacer mantenimiento.
       </p>
-      <div class="form-grid" style="grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px">
+      <div class="form-grid buscar-her-filters">
         <div class="form-group">
           <label>Tipo</label>
           <div class="select-wrapper">
             <select id="buscar-tipo">
               <option value="">Todos</option>
-              <option value="M">M</option>
-              <option value="G">G</option>
             </select>
           </div>
         </div>
@@ -356,11 +357,15 @@
       <!-- PASO 3: RESUMEN -->
       <div class="step-content" id="step-content-3">
         <div class="step3-layout">
-          <!-- Panel izquierdo: datos básicos + entrega -->
+          <!-- Panel izquierdo: datos básicos + detalle + entrega -->
           <div class="step3-panel">
             <div class="step3-section">
               <p class="step3-section-title">Datos básicos</p>
               <div id="step3-basic-data"></div>
+            </div>
+            <div class="step3-section" id="step3-detalle-section">
+              <p class="step3-section-title">Detalle del mantenimiento</p>
+              <div id="step3-detalle-data"></div>
             </div>
             <div class="step3-section">
               <p class="step3-section-title">Quien entrega</p>

@@ -26,7 +26,6 @@ def _require_any_session(f):
 
 
 @bp.route('/items', methods=['GET'])
-@_require_any_session
 def list_items():
     filters = {
         'tipo':      request.args.get('tipo'),
@@ -47,7 +46,6 @@ def list_items():
 
 
 @bp.route('/items/<int:id_registro>', methods=['GET'])
-@_require_any_session
 def get_item(id_registro):
     item = get_by_id(id_registro)
     if not item:
@@ -71,7 +69,10 @@ def verify_password():
 def create_item():
     data = request.get_json(silent=True) or {}
     usuario = session.get('admin_user', 'admin')
-    create(data, usuario)
+    try:
+        create(data, usuario)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     return jsonify({'ok': True}), 201
 
 
@@ -79,7 +80,10 @@ def create_item():
 def update_item(id_registro):
     data = request.get_json(silent=True) or {}
     usuario = session.get('admin_user', 'admin')
-    update(id_registro, data, usuario)
+    try:
+        update(id_registro, data, usuario)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     return jsonify({'ok': True})
 
 
@@ -98,6 +102,15 @@ def delete_item(id_registro):
 
 @bp.route('/opciones', methods=['GET'])
 def opciones():
-    tipos     = [o['valor'] for o in get_by_grupo('tipo_inv')]
+    tipos       = [o['valor'] for o in get_by_grupo('tipo_inv')]
     ubicaciones = [o['valor'] for o in get_by_grupo('ubicacion_inv')]
     return jsonify({'ubicaciones': ubicaciones, 'tipos': tipos})
+
+
+@bp.route('/tipos-existentes', methods=['GET'])
+def tipos_existentes():
+    """Tipos DISTINTOS que existen en registros — solo lo que está en los datos."""
+    from backend.db import query as db_query
+    from backend.models.inventario import TABLE
+    rows = db_query(f"SELECT DISTINCT Tipo FROM dbo.[{TABLE}] WHERE Tipo IS NOT NULL AND Tipo <> '' ORDER BY Tipo")
+    return jsonify([r['Tipo'] for r in rows])

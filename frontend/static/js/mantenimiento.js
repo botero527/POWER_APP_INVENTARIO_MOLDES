@@ -97,8 +97,10 @@ function showApp(me) {
   document.getElementById('mant-role-badge').textContent = currentRol;
 
   document.getElementById('btn-logout').addEventListener('click', async () => {
-    await api('/api/mantenimiento/logout', { method: 'POST' });
-    location.reload();
+    try {
+      await api('/api/mantenimiento/logout', { method: 'POST' });
+    } catch { /* sesión ya expirada, igual redirigir */ }
+    location.href = '/mantenimiento';
   });
 
   bindRobot();
@@ -115,17 +117,25 @@ let herSeleccionado = null;  // el registro de inventario elegido
 let manttoActivoId  = null;  // id del ManttoHead recién creado
 let imgConfig       = null;  // datos de Imagenes para el herramental
 
-function openBuscarHer() {
+async function openBuscarHer() {
   herSeleccionado = null;
   document.getElementById('modal-buscar-her').classList.remove('hidden');
   ['buscar-tipo','buscar-cod','buscar-version','buscar-pieza','buscar-repeticion'].forEach(id => {
     const el = document.getElementById(id);
-    if (el.tagName === 'SELECT') el.value = '';
-    else el.value = '';
+    el.value = '';
   });
   document.getElementById('buscar-tbody').innerHTML =
     `<tr class="row-loading"><td colspan="8">Escriba para buscar...</td></tr>`;
   document.getElementById('buscar-cod').focus();
+
+  // Cargar tipos existentes en la BD (una sola vez)
+  const sel = document.getElementById('buscar-tipo');
+  if (sel.options.length <= 1) {
+    try {
+      const tipos = await api('/api/mantenimiento/tipos-existentes');
+      tipos.forEach(t => sel.insertAdjacentHTML('beforeend', `<option value="${t}">${t}</option>`));
+    } catch { /* silencioso, el select queda vacío y el usuario escribe */ }
+  }
 }
 
 function closeBuscarHer() {
@@ -167,7 +177,7 @@ function bindBuscarHer() {
 async function buscarHeramentales() {
   const tipo       = document.getElementById('buscar-tipo').value;
   const cod        = padField(document.getElementById('buscar-cod').value.trim(), 4);
-  const version    = document.getElementById('buscar-version').value.trim();
+  const version    = padField(document.getElementById('buscar-version').value.trim(), 3);
   const pieza      = padField(document.getElementById('buscar-pieza').value.trim(), 3);
   const repeticion = document.getElementById('buscar-repeticion').value.trim();
 
@@ -217,7 +227,6 @@ async function seleccionarHer(idx) {
     <div class="confirm-row"><span class="confirm-label">Código</span><span class="confirm-value">${row.CodMolde}</span></div>
     <div class="confirm-row"><span class="confirm-label">Versión</span><span class="confirm-value">${row.Version}</span></div>
     <div class="confirm-row"><span class="confirm-label">Pieza</span><span class="confirm-value">${row.Pieza}</span></div>
-    <div class="confirm-row"><span class="confirm-label">Descripción</span><span class="confirm-value">${row.Adicionales || row.Lote || '--'}</span></div>
     <div class="confirm-rep">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Repetición: ${row.Repeticion ?? '--'}
@@ -280,17 +289,22 @@ async function abrirFormMantto() {
   document.getElementById('form-mantto-title').textContent =
     `${herSeleccionado.Tipo}${herSeleccionado.CodMolde} — Rep. ${herSeleccionado._nextRep}`;
   document.getElementById('modal-form-mantto').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
   // Pre-cargar opciones dinamicas en paralelo con step1
   loadOpcionesDynamic();
   await loadStep1();
 }
 
 function closeFormMantto() {
-  // Si hay un mantto activo pendiente, avisar que quedó guardado
-  if (manttoActivoId) {
+  if (manttoActivoId && currentStep === 1) {
+    // Guardar silenciosamente todos los campos con valor antes de cerrar
+    saveAllStep1().finally(() => {});
+    toast('Mantenimiento guardado — puedes continuarlo desde la lista', 'info');
+  } else if (manttoActivoId) {
     toast('Mantenimiento guardado — puedes continuarlo desde la lista', 'info');
   }
   document.getElementById('modal-form-mantto').classList.add('hidden');
+  document.body.style.overflow = '';
   manttoActivoId = null; imgConfig = null; herSeleccionado = null;
   recibeUsername = null; window._step2Data = null;
   currentStep = 1;
@@ -339,6 +353,7 @@ async function resumeMantto(id) {
     document.getElementById('form-mantto-title').textContent =
       `${m.Tipo}${m.CodHer} — Rep. ${m.Repeticion} (Continuando)`;
     document.getElementById('modal-form-mantto').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
 
     // Cargar datos del paso correspondiente
     if (startStep === 1) {
@@ -530,6 +545,17 @@ async function loadStep3() {
     const m = await api(`/api/mantenimiento/manttos/${manttoActivoId}`);
     window._step2Data = m; // guardar para si vuelve al paso 2
     panel.innerHTML = buildResumenHTML(m);
+    // Poblar detalle del mantenimiento en panel izquierdo
+    const detalleDiv = document.getElementById('step3-detalle-data');
+    if (detalleDiv) {
+      detalleDiv.innerHTML = `
+        <div class="step3-detalle-rows">
+          <div class="step3-detalle-row"><span class="step3-detalle-label">Tipo</span><span class="step3-detalle-val">${escapeHtml(m.TipoMant || '--')}</span></div>
+          <div class="step3-detalle-row"><span class="step3-detalle-label">Estado postes</span><span class="step3-detalle-val">${escapeHtml(m.EstadoPostes || '--')}</span></div>
+          <div class="step3-detalle-row"><span class="step3-detalle-label">Patrón ref.</span><span class="step3-detalle-val">${escapeHtml(m.PatronReferencia || '--')}</span></div>
+          <div class="step3-detalle-row"><span class="step3-detalle-label">Observaciones</span><span class="step3-detalle-val">${escapeHtml(m.Observaciones || 'No registra')}</span></div>
+        </div>`;
+    }
   } catch (e) {
     panel.innerHTML = `<p style="color:var(--text-muted)">Error cargando resumen: ${e.message}</p>`;
   }
@@ -562,7 +588,7 @@ function buildResumenHTML(m) {
     </div>`;
 
   const espesorBlock = espesorItems.length ? `
-    <div class="meds-section" style="flex:1;min-width:0">
+    <div class="meds-section meds-section--compact" style="flex:1;min-width:0">
       <div class="meds-section-title">Espesor de Pista</div>
       <div class="meds-table-wrap">${buildTable(espesorItems)}</div>
     </div>` : '';
@@ -586,14 +612,7 @@ function buildResumenHTML(m) {
       ${espesorBlock}
     </div>
     ${toleranciaBlock}
-    ${noMeds}
-    <div class="detail-card" style="margin-top:16px">
-      <div class="detail-card-title">Detalle del Mantenimiento</div>
-      <div class="detail-row"><span class="detail-label">Tipo mantenimiento</span><span class="detail-value">${escapeHtml(m.TipoMant || '--')}</span></div>
-      <div class="detail-row"><span class="detail-label">Estado de postes</span><span class="detail-value">${escapeHtml(m.EstadoPostes || '--')}</span></div>
-      <div class="detail-row"><span class="detail-label">Patrón de referencia</span><span class="detail-value">${escapeHtml(m.PatronReferencia || '--')}</span></div>
-      <div class="detail-row"><span class="detail-label">Observaciones</span><span class="detail-value">${escapeHtml(m.Observaciones || 'No registra')}</span></div>
-    </div>`;
+    ${noMeds}`;
 }
 
 function openImgLightbox(src) {
@@ -814,6 +833,7 @@ function _measureRowHtml(prefix, idMed, clase) {
       <input class="measure-input" type="text" inputmode="decimal"
         id="inp-${prefix}-${idMed}" placeholder="—"
         oninput="onMeasureChange('${prefix}', ${idMed})"
+        onblur="onMeasureBlur('${prefix}', ${idMed}, '${clase}')"
         onkeydown="onMeasureKeydown(event, '${prefix}', ${idMed}, '${clase}')" />
       <button class="measure-action-btn" id="btn-${prefix}-${idMed}"
         title="Guardar" onclick="saveSingleMeasure('${prefix}', ${idMed}, '${clase}')">
@@ -828,13 +848,17 @@ function _measureRowHtml(prefix, idMed, clase) {
     </div>`;
 }
 
-// Auto-decimal: "15" → "1.5", "150" → "1.50", "1.5" → "1.5" (ya tiene punto, no tocar)
+// Auto-decimal: "15" → "1.5", "1.5" → "1.5". Máximo 1 decimal permitido.
 function autoDecimal(raw) {
   const s = String(raw).trim();
   if (!s) return '';
-  if (s.includes('.')) return s;           // ya tiene punto manual
-  if (s.length === 1) return s;            // solo un dígito, esperar más
-  return s[0] + '.' + s.slice(1);         // primer dígito + punto + resto
+  if (s.includes('.')) {
+    // Truncar a 1 decimal si hay más
+    const [int, dec] = s.split('.');
+    return dec !== undefined ? `${int}.${dec.slice(0, 1)}` : int;
+  }
+  if (s.length === 1) return s;
+  return s[0] + '.' + s[1];   // solo primer decimal
 }
 
 function onMeasureKeydown(e, prefix, idMed, clase) {
@@ -932,9 +956,10 @@ function onMeasureChange(prefix, idMed) {
   let val = inp.value.replace(',', '.');
   // 2. Quitar todo lo que no sea dígito o punto (guiones, letras, espacios, etc.)
   val = val.replace(/[^0-9.]/g, '');
-  // 3. Solo permitir un punto decimal — si hay más, quitar los sobrantes
+  // 3. Solo permitir un punto decimal y máximo 1 dígito después del punto
   const parts = val.split('.');
   if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+  if (parts.length === 2) val = parts[0] + '.' + parts[1].slice(0, 1);
   // Actualizar el campo solo si cambió (evita mover el cursor innecesariamente)
   if (inp.value !== val) {
     inp.value = val;
@@ -959,6 +984,26 @@ function onMeasureChange(prefix, idMed) {
     btn.querySelector('.icon-pencil').style.display = 'none';
     btn.title = 'Guardar';
   }
+}
+
+// Auto-guarda al perder el foco si el campo tiene valor y no está ya guardado
+function onMeasureBlur(prefix, idMed, clase) {
+  const inp = document.getElementById(`inp-${prefix}-${idMed}`);
+  if (!inp || inp.readOnly) return; // ya guardado
+  const raw = inp.value.trim();
+  if (!raw) return; // vacío, no guardar
+  const value = parseFloat(raw);
+  if (isNaN(value)) return;
+  // guardar silenciosamente (sin toast de error para no interrumpir el flujo)
+  if (!manttoActivoId) return;
+  api(`/api/mantenimiento/manttos/${manttoActivoId}/detail`, {
+    method: 'PUT',
+    body: JSON.stringify({ id_med: idMed, clase, value }),
+  }).then(() => {
+    setFieldSaved(prefix, idMed, null);
+  }).catch(() => {
+    // fallo silencioso en blur — el usuario puede intentar manualmente
+  });
 }
 
 // Estado visual: guardado (muestra lápiz, input readonly)

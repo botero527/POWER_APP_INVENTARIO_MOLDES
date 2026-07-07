@@ -5,6 +5,7 @@ from flask import Blueprint, request, jsonify, session, current_app
 from werkzeug.utils import secure_filename
 from backend.models.imagenes import get_all, get_by_id, find_for_tool, find_candidates, create, update, delete, build_nombre
 from backend.models.usuarios import get_usernames, verify_login
+from backend.models.opciones import get_by_grupo
 from backend.limiter import limiter
 
 bp = Blueprint('mantenimiento', __name__, url_prefix='/api/mantenimiento')
@@ -57,6 +58,7 @@ def logout():
     session.pop('mant_user_id', None)
     session.pop('mant_username', None)
     session.pop('mant_rol', None)
+    session.modified = True
     return jsonify({'ok': True})
 
 
@@ -299,6 +301,19 @@ def list_manttos():
         'has_more': (offset + len(rows)) < total,
         'offset':   offset,
     })
+
+
+@bp.route('/tipos-existentes', methods=['GET'])
+@login_required
+def tipos_existentes():
+    """Tipos DISTINTOS que existen en registros de inventario y mantenimiento."""
+    from backend.db import query as db_query
+    from backend.models.inventario import TABLE as INV_TABLE
+    from backend.models.mantto import HEAD
+    rows_inv  = db_query(f"SELECT DISTINCT Tipo FROM dbo.[{INV_TABLE}] WHERE Tipo IS NOT NULL AND Tipo <> ''")
+    rows_mant = db_query(f"SELECT DISTINCT Tipo FROM dbo.[{HEAD}] WHERE Tipo IS NOT NULL AND Tipo <> ''")
+    merged = sorted(set(r['Tipo'] for r in rows_inv + rows_mant))
+    return jsonify(merged)
 
 
 @bp.route('/manttos/next-rep', methods=['GET'])

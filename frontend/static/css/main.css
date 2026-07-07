@@ -60,7 +60,7 @@ a { text-decoration: none; color: inherit; }
 }
 
 .agp-logo-img {
-  height: 60px;
+  height: 30px;
   width: auto;
   object-fit: contain;
 }
@@ -451,6 +451,66 @@ a { text-decoration: none; color: inherit; }
   font-size: 12px; font-weight: 600;
   white-space: nowrap;
 }
+
+/* Grid Excel */
+.import-excel-wrap {
+  overflow: auto;
+  max-height: 360px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.import-excel-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+.import-excel-table thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  font-size: 10px; font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: .4px;
+  white-space: nowrap;
+  text-align: left;
+}
+.import-cell {
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  min-width: 60px;
+  outline: none;
+  color: var(--text);
+  white-space: nowrap;
+}
+.import-cell:focus {
+  background: #fffbe6;
+  box-shadow: inset 0 0 0 2px #f0c040;
+  position: relative; z-index: 1;
+}
+.import-rn {
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg);
+  min-width: 30px;
+  user-select: none;
+}
+.import-st {
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  min-width: 140px;
+  font-size: 11px;
+  white-space: normal;
+}
+.import-st-ok   { color: #2e9e5b; font-weight: 700; }
+.import-st-err  { color: var(--danger); font-weight: 600; }
+.import-st-pending { color: var(--text-muted); text-align: center; }
+.import-st-th { min-width: 140px; }
+
 .import-row-ok td  { background: #f0faf4 !important; }
 .import-row-err td { background: #fdf0f0 !important; }
 .import-status-ok  { color: #2e9e5b; font-weight: 700; white-space: nowrap; }
@@ -461,3 +521,108 @@ a { text-decoration: none; color: inherit; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE  —  tablet landscape → tablet → phone
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Tablet landscape (≤1024px) ─────────────────────────── */
+@media (max-width: 1024px) {
+  .main-content { padding: 20px 16px; }
+  .consultar-layout { grid-template-columns: 1fr 200px; }
+  .data-table th, .data-table td { padding: 9px 10px; }
+}
+
+/* ── Tablet portrait (≤768px) ───────────────────────────── */
+@media (max-width: 768px) {
+  :root { --topbar-h: 54px; }
+
+  /* Topbar */
+  .topbar { padding: 0 10px; gap: 8px; }
+  .topbar-title { font-size: 14px; max-width: 180px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .agp-logo-img { height: 46px !important; }
+
+  /* Layout */
+  .main-content { padding: 16px 12px; }
+  .consultar-layout { grid-template-columns: 1fr; }
+  .home-grid { max-width: 100%; gap: 14px; }
+
+  /* Table toolbar */
+  .table-toolbar { flex-wrap: wrap; padding: 12px 14px; gap: 8px; }
+  .table-toolbar input[type="text"],
+  .table-toolbar select { font-size: 14px; }
+
+  /* Modals — más margen lateral */
+  .modal-overlay { padding: 10px; }
+  .modal-body { max-height: 72vh; overflow-y: auto; }
+  .modal-lg { max-width: 100%; }
+
+  /* Formularios */
+  .form-grid { grid-template-columns: 1fr !important; }
+  .form-group label { font-size: 12px; }
+
+  /* Botones más fáciles de tocar */
+  .btn { min-height: 40px; }
+  .btn-sm { min-height: 34px; }
+}
+
+/* ── Phone (≤640px) ─────────────────────────────────────── */
+@media (max-width: 640px) {
+  :root { --topbar-h: 50px; }
+
+  /* Topbar: esconde el título, solo queda logo y back button */
+  .topbar-title { display: none; }
+  .agp-logo-img { height: 40px !important; }
+  .topbar { padding: 0 8px; }
+
+  /* Main content sin padding horizontal mínimo */
+  .main-content { padding: 12px 8px; }
+
+  /* Modales: bottom sheet */
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+  .modal, .modal-lg {
+    border-radius: 18px 18px 0 0;
+    max-width: 100%;
+    max-height: 92vh;
+    animation: modal-in-up .22s ease;
+  }
+  .modal-body {
+    max-height: calc(92vh - 130px);
+    overflow-y: auto;
+  }
+  @keyframes modal-in-up {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Tabla con scroll horizontal, columnas con ancho mínimo */
+  .table-wrapper { -webkit-overflow-scrolling: touch; }
+  .data-table { font-size: 12px; min-width: 500px; }
+  .data-table th, .data-table td { padding: 8px 8px; }
+
+  /* Footer modal: botones apilados */
+  .modal-footer { flex-wrap: wrap; gap: 8px; }
+  .modal-footer .btn { flex: 1; min-width: 100px; justify-content: center; }
+
+  /* Home cards: 2 columnas en phone */
+  .home-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .home-card { padding: 22px 14px 18px; }
+  .home-card-icon svg { width: 48px; height: 48px; }
+  .home-card-label { font-size: 12px; }
+
+  /* Tabla de import Excel: scroll horizontal */
+  .import-excel-wrap { max-height: 280px; }
+  .import-cell { min-width: 70px; font-size: 11px; padding: 4px 6px; }
+  .import-excel-table thead th { font-size: 9px; padding: 5px 6px; }
+}
+
+/* ── Phone pequeño (≤420px) ─────────────────────────────── */
+@media (max-width: 420px) {
+  .home-grid { grid-template-columns: 1fr; max-width: 280px; margin: 0 auto; }
+  .table-toolbar { flex-direction: column; align-items: stretch; }
+  .table-toolbar .btn { width: 100%; justify-content: center; }
+}
