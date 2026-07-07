@@ -365,11 +365,7 @@ def update_mantto(id_mant):
         val = body.get(field)
         if val and isinstance(val, str) and len(val) > max_len:
             return jsonify({'error': f'{field} excede longitud máxima ({max_len})'}), 400
-    was_finalizado = m.get('Estatus') == 'Finalizado'
     update_head(id_mant, body)
-    if body.get('Estatus') == 'Finalizado' and not was_finalizado:
-        from backend.models.inventario import increment_usos
-        increment_usos(m['Tipo'], m['CodHer'], m['Version'], m['Pieza'])
     return jsonify({'ok': True})
 
 

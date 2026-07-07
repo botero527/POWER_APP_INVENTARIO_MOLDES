@@ -11,6 +11,8 @@ MAX_LENS = {
     'tipo_mant':     95,
     'estado_postes': 95,
     'patron_ref':    95,
+    'tipo_inv':      10,
+    'ubicacion_inv': 50,
 }
 
 # Labels canonicos por grupo
@@ -18,6 +20,8 @@ GROUP_LABELS = {
     'tipo_mant':     'Tipo de Mantenimiento',
     'estado_postes': 'Estado de Postes',
     'patron_ref':    'Patron de Referencia',
+    'tipo_inv':      'Tipo Herramental (Inventario)',
+    'ubicacion_inv': 'Ubicacion (Inventario)',
 }
 
 

@@ -285,6 +285,7 @@ a { text-decoration: none; color: inherit; }
 }
 .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(58,143,163,.45); }
 .btn-primary:active { transform: none; }
+.btn-primary:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
 
 .btn-outline {
   background: transparent;
@@ -436,6 +437,24 @@ a { text-decoration: none; color: inherit; }
   100% { box-shadow: 0 0 0 0 rgba(22,163,74,0); }
 }
 .pulse-once { animation: pulse-once .7s ease-out; }
+
+/* ── IMPORT EXCEL ──────────────────────────────────────────── */
+.import-col-guide {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.import-col-guide span {
+  background: var(--primary-lt);
+  color: var(--primary-dk);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 10px;
+  font-size: 12px; font-weight: 600;
+  white-space: nowrap;
+}
+.import-row-ok td  { background: #f0faf4 !important; }
+.import-row-err td { background: #fdf0f0 !important; }
+.import-status-ok  { color: #2e9e5b; font-weight: 700; white-space: nowrap; }
+.import-status-err { color: var(--danger); font-weight: 600; font-size: 11px; white-space: nowrap; }
 
 /* ── SCROLLBAR ─────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }

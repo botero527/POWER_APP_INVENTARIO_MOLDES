@@ -99,10 +99,16 @@
       <div class="table-section">
         <div class="table-toolbar">
           <h2 class="section-title">Inventario de Herramientas</h2>
-          <button class="btn btn-primary" id="btn-agregar">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
-            Agregar Nuevo
-          </button>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline" id="btn-importar-excel">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/><line x1="8" y1="13" x2="16" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="8" y1="17" x2="12" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              Importar Excel
+            </button>
+            <button class="btn btn-primary" id="btn-agregar">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+              Agregar Nuevo
+            </button>
+          </div>
         </div>
         <div class="table-wrapper">
           <table class="data-table" id="tabla-inventario">
@@ -118,7 +124,6 @@
                 <th>Ubicación</th>
                 <th>Descripción Vehículo</th>
                 <th>Lote</th>
-                <th>Usos</th>
               </tr>
             </thead>
             <tbody id="tabla-body">
@@ -309,10 +314,6 @@
           <input type="text" id="form-puesto" />
         </div>
         <div class="form-group">
-          <label>Usos</label>
-          <input type="number" id="form-usos" value="0" min="0" />
-        </div>
-        <div class="form-group">
           <label>Tipo</label>
           <div class="select-wrapper">
             <select id="form-tipo"></select>
@@ -345,11 +346,7 @@
         <textarea id="delete-motivo" rows="3" placeholder="Ej: Herramental dado de baja por desgaste excesivo..."
           style="width:100%;resize:vertical;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px"></textarea>
       </div>
-      <div class="form-group">
-        <label for="delete-password">Clave de administrador <span class="required">*</span></label>
-        <input type="password" id="delete-password" placeholder="••••••••" autocomplete="off" />
-      </div>
-      <p class="error-msg hidden" id="delete-error">Error. Verifica la clave y completa el motivo.</p>
+      <p class="error-msg hidden" id="delete-error">Ingresa el motivo de eliminación.</p>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" id="btn-cancel-delete">Cancelar</button>
@@ -361,6 +358,65 @@
           <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
         </svg>
         Eliminar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL IMPORTAR EXCEL -->
+<div class="modal-overlay hidden" id="modal-import">
+  <div class="modal modal-lg" style="max-width:780px">
+    <div class="modal-header">
+      <h3>Importar desde Excel</h3>
+      <button class="modal-close" id="btn-close-import">&times;</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- instrucciones -->
+      <div id="import-instructions">
+        <p style="margin-bottom:10px">Copia las filas directamente desde Excel y pégalas abajo. Las columnas deben estar en este orden:</p>
+        <div class="import-col-guide">
+          <span>1. Tipo</span><span>2. CodMolde</span><span>3. Versión</span><span>4. Pieza</span>
+          <span>5. Vehículo</span><span>6. Lote</span><span>7. Repetición</span><span>8. Ubicación</span>
+          <span>9. Puesto</span>
+        </div>
+        <p style="margin-top:8px;font-size:12px;color:var(--text-muted)">
+          <b>Tipo:</b> M o G &nbsp;·&nbsp; <b>Ubicación:</b> HORNOS / MATRICERIA / MEZANINE / PARQUEADERO / B10 / B15 &nbsp;·&nbsp; Los campos opcionales pueden ir vacíos pero la columna debe existir.
+        </p>
+        <textarea id="import-paste-area" rows="6"
+          placeholder="Pega aquí las filas copiadas desde Excel (Ctrl+V)..."
+          style="width:100%;margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:monospace;font-size:12px;resize:vertical;background:var(--bg)"></textarea>
+        <p class="error-msg hidden" id="import-parse-error"></p>
+      </div>
+
+      <!-- resultado validación -->
+      <div id="import-result" class="hidden">
+        <div id="import-summary" style="margin-bottom:12px;font-size:13px;font-weight:600"></div>
+        <div style="overflow-x:auto;max-height:320px;overflow-y:auto">
+          <table class="data-table" id="import-preview-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Tipo</th><th>CodMolde</th><th>Versión</th><th>Pieza</th>
+                <th>Vehículo</th><th>Lote</th><th>Rep.</th><th>Ubicación</th><th>Puesto</th>
+                <th>Imagen</th>
+              </tr>
+            </thead>
+            <tbody id="import-preview-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btn-cancel-import">Cancelar</button>
+      <button class="btn btn-outline" id="btn-import-validate" style="display:none">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Validar filas
+      </button>
+      <button class="btn btn-primary hidden" id="btn-import-confirm">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+        Importar válidos
       </button>
     </div>
   </div>

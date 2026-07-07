@@ -2,10 +2,6 @@ from backend.db import query, execute
 
 TABLE = 'AppControlInventarios_RegistroInventario'
 
-UBICACIONES = ['HORNOS', 'MATRICERIA', 'MEZANINE', 'PARQUEADERO', 'B10', 'B15']
-TIPOS = ['M', 'G']
-
-
 PAGE_SIZE = 100
 
 
@@ -65,13 +61,12 @@ def create(data, usuario):
         INSERT INTO dbo.[{TABLE}]
             (Tipo, CodMolde, Vehiculo, Pieza, Lote, Version, Repeticion,
              Ubicacion, Usos, Puesto, FechaCreacion, UsuarioCreate, FechaEdicion, UsuarioEdit)
-        VALUES (?,?,?,?,?,?,?,?,?,?,GETDATE(),?,GETDATE(),?)
+        VALUES (?,?,?,?,?,?,?,?,0,?,GETDATE(),?,GETDATE(),?)
     """
     params = [
         data.get('tipo'), data.get('cod_molde'), data.get('vehiculo'),
         data.get('pieza'), data.get('lote'), data.get('version'),
         data.get('repeticion'), data.get('ubicacion'),
-        int(data.get('usos') or 0),  # siempre int, evita error en columna INT
         data.get('puesto'), usuario, usuario,
     ]
     execute(sql, params)
@@ -81,26 +76,17 @@ def update(id_registro, data, usuario):
     sql = f"""
         UPDATE dbo.[{TABLE}] SET
             Tipo=?, CodMolde=?, Vehiculo=?, Pieza=?, Lote=?, Version=?,
-            Repeticion=?, Ubicacion=?, Usos=?, Puesto=?,
+            Repeticion=?, Ubicacion=?, Puesto=?,
             FechaEdicion=GETDATE(), UsuarioEdit=?
         WHERE IdRegistro=?
     """
     params = [
         data.get('tipo'), data.get('cod_molde'), data.get('vehiculo'),
         data.get('pieza'), data.get('lote'), data.get('version'),
-        data.get('repeticion'), data.get('ubicacion'), data.get('usos'),
+        data.get('repeticion'), data.get('ubicacion'),
         data.get('puesto'), usuario, id_registro,
     ]
     execute(sql, params)
-
-
-def increment_usos(tipo, cod, version, pieza):
-    """Suma 1 a Usos del herramental cuando se finaliza un mantenimiento."""
-    execute(
-        f"UPDATE dbo.[{TABLE}] SET Usos = ISNULL(Usos, 0) + 1 "
-        f"WHERE Tipo=? AND CodMolde=? AND Version=? AND Pieza=? AND (Activo IS NULL OR Activo=1)",
-        [tipo, cod, version, pieza]
-    )
 
 
 def soft_delete(id_registro, motivo, usuario):

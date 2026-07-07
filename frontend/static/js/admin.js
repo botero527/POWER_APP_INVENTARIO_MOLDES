@@ -584,7 +584,6 @@ function rowHtml(r) {
       <td>${escapeHtml(r.Ubicacion ?? '')}</td>
       <td>${escapeHtml(r.Vehiculo ?? '')}</td>
       <td>${escapeHtml(r.Lote ?? '')}</td>
-      <td>${escapeHtml(r.Usos ?? '0')}</td>
     </tr>
   `;
 }
@@ -641,23 +640,185 @@ async function checkImgStatus() {
       .then(r => r.ok ? r.json() : null).catch(() => null);
 
     bar.classList.remove('hidden', 'found', 'missing');
+    const saveBtn = document.getElementById('btn-save-form');
     if (img) {
       bar.classList.add('found');
       bar.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span>Imagen encontrada: <strong>${escapeHtml(img.Nombre_Imagen)}</strong></span>`;
+      saveBtn.disabled = false;
     } else {
       bar.classList.add('missing');
       bar.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="2"/><line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2"/><line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2"/></svg>
-        <span>Sin imagen asociada — este herramental no tiene imagen configurada en Gestión de Imágenes.</span>`;
+        <span>Sin imagen asociada — configura la imagen en Gestión de Imágenes primero.</span>`;
+      saveBtn.disabled = true;
     }
   } catch { bar.classList.add('hidden'); }
 }
 
+/* ── IMPORTAR EXCEL ────────────────────────────────────────── */
+const IMPORT_COLS = ['tipo','cod_molde','version','pieza','vehiculo','lote','repeticion','ubicacion','puesto'];
+let _importRows = [];
+
+function openImportModal() {
+  _importRows = [];
+  document.getElementById('import-paste-area').value = '';
+  document.getElementById('import-parse-error').classList.add('hidden');
+  document.getElementById('import-instructions').classList.remove('hidden');
+  document.getElementById('import-result').classList.add('hidden');
+  document.getElementById('btn-import-validate').style.display = '';
+  document.getElementById('btn-import-confirm').classList.add('hidden');
+  document.getElementById('modal-import').classList.remove('hidden');
+  setTimeout(() => document.getElementById('import-paste-area').focus(), 50);
+}
+
+function closeImportModal() {
+  document.getElementById('modal-import').classList.add('hidden');
+}
+
+function parsePaste(raw) {
+  const lines = raw.trim().split(/\r?\n/).filter(l => l.trim());
+  return lines.map(line => {
+    const cells = line.split('\t').map(c => c.trim());
+    const obj = {};
+    IMPORT_COLS.forEach((col, i) => { obj[col] = cells[i] ?? ''; });
+    obj.tipo      = obj.tipo.toUpperCase().trim();
+    obj.ubicacion = obj.ubicacion.toUpperCase().trim();
+    return obj;
+  });
+}
+
+async function validateImportRows() {
+  const raw = document.getElementById('import-paste-area').value;
+  const errEl = document.getElementById('import-parse-error');
+  errEl.classList.add('hidden');
+
+  if (!raw.trim()) {
+    errEl.textContent = 'Pega datos desde Excel primero.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const rows = parsePaste(raw);
+  if (!rows.length) {
+    errEl.textContent = 'No se encontraron filas válidas.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const btn = document.getElementById('btn-import-validate');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Validando...';
+
+  // Validar imagen de cada fila en paralelo
+  const checked = await Promise.all(rows.map(async (row, i) => {
+    if (!row.tipo || !row.cod_molde) return { ...row, _idx: i, _img: null, _err: 'Tipo o CodMolde vacío' };
+    const params = new URLSearchParams({ tipo: row.tipo, cod: row.cod_molde });
+    if (row.version) params.set('version', row.version);
+    if (row.pieza)   params.set('pieza', row.pieza);
+    try {
+      const img = await fetch(`/api/mantenimiento/imagenes/buscar?${params}`)
+        .then(r => r.ok ? r.json() : null).catch(() => null);
+      return { ...row, _idx: i, _img: img, _err: img ? null : 'Sin imagen' };
+    } catch {
+      return { ...row, _idx: i, _img: null, _err: 'Error al verificar' };
+    }
+  }));
+
+  _importRows = checked;
+  renderImportPreview(checked);
+
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Validar filas';
+}
+
+function resetImportView() {
+  document.getElementById('import-instructions').classList.remove('hidden');
+  document.getElementById('import-result').classList.add('hidden');
+  document.getElementById('btn-import-validate').style.display = '';
+  document.getElementById('btn-import-confirm').classList.add('hidden');
+  setTimeout(() => document.getElementById('import-paste-area').focus(), 50);
+}
+
+function renderImportPreview(rows) {
+  const valid = rows.filter(r => r._img);
+  const tbody = document.getElementById('import-preview-body');
+
+  tbody.innerHTML = rows.map(r => `
+    <tr class="${r._img ? 'import-row-ok' : 'import-row-err'}">
+      <td style="text-align:center;font-weight:700;color:var(--text-muted)">${r._idx + 1}</td>
+      <td>${escapeHtml(r.tipo)}</td>
+      <td>${escapeHtml(r.cod_molde)}</td>
+      <td>${escapeHtml(r.version)}</td>
+      <td>${escapeHtml(r.pieza)}</td>
+      <td>${escapeHtml(r.vehiculo)}</td>
+      <td>${escapeHtml(r.lote)}</td>
+      <td>${escapeHtml(r.repeticion)}</td>
+      <td>${escapeHtml(r.ubicacion)}</td>
+      <td>${escapeHtml(r.puesto)}</td>
+      <td>${r._img
+        ? `<span class="import-status-ok">✓ ${escapeHtml(r._img.Nombre_Imagen)}</span>`
+        : `<span class="import-status-err">✗ ${escapeHtml(r._err)}</span>`}</td>
+    </tr>`).join('');
+
+  const summary = document.getElementById('import-summary');
+  summary.innerHTML = valid.length
+    ? `<span style="color:#2e9e5b">✓ ${valid.length} fila${valid.length > 1 ? 's' : ''} con imagen</span>`
+      + (rows.length - valid.length ? `&nbsp;&nbsp;<span style="color:var(--danger)">✗ ${rows.length - valid.length} sin imagen (se omitirán)</span>` : '')
+    : `<span style="color:var(--danger)">✗ Ninguna fila tiene imagen asociada — no se puede importar.</span>`;
+  summary.innerHTML += `&nbsp;&nbsp;<button onclick="resetImportView()" style="font-size:12px;background:none;border:none;color:var(--primary);cursor:pointer;text-decoration:underline">← Volver a pegar</button>`;
+
+  document.getElementById('import-instructions').classList.add('hidden');
+  document.getElementById('import-result').classList.remove('hidden');
+  document.getElementById('btn-import-confirm').classList.toggle('hidden', valid.length === 0);
+}
+
+async function confirmImport() {
+  const valid = _importRows.filter(r => r._img);
+  if (!valid.length) return;
+
+  const btn = document.getElementById('btn-import-confirm');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Importando...';
+
+  let ok = 0, fail = 0;
+  try {
+    for (const row of valid) {
+      try {
+        await api('/api/consultar/items', {
+          method: 'POST',
+          body: JSON.stringify({
+            tipo:       row.tipo,
+            cod_molde:  row.cod_molde,
+            version:    row.version   || null,
+            pieza:      row.pieza     || null,
+            vehiculo:   row.vehiculo  || null,
+            lote:       row.lote      || null,
+            repeticion: row.repeticion || null,
+            ubicacion:  row.ubicacion || null,
+            puesto:     row.puesto    || null,
+          }),
+        });
+        ok++;
+      } catch { fail++; }
+    }
+    closeImportModal();
+    loadTable();
+    toast(`${ok} registro${ok > 1 ? 's' : ''} importado${ok > 1 ? 's' : ''}${fail ? ` · ${fail} fallaron` : ''}`, ok ? 'success' : 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg> Importar válidos';
+  }
+}
+
 function bindButtons() {
   document.getElementById('btn-agregar').addEventListener('click', () => {
-    pendingAction = 'add';
-    openPasswordModal();
+    openFormModal(null);
   });
+  document.getElementById('btn-importar-excel').addEventListener('click', openImportModal);
+  document.getElementById('btn-close-import').addEventListener('click', closeImportModal);
+  document.getElementById('btn-cancel-import').addEventListener('click', closeImportModal);
+  document.getElementById('btn-import-validate').addEventListener('click', validateImportRows);
+  document.getElementById('btn-import-confirm').addEventListener('click', confirmImport);
 
   // Password modal
   document.getElementById('btn-close-password').addEventListener('click', closePasswordModal);
@@ -688,9 +849,7 @@ function bindButtons() {
 
 /* ── EDIT HANDLER ──────────────────────────────────────────── */
 function handleEdit(id) {
-  editTarget = id;
-  pendingAction = 'edit';
-  openPasswordModal();
+  openFormModal(id);
 }
 
 /* ── DELETE HANDLERS ───────────────────────────────────────── */
@@ -699,7 +858,6 @@ function handleDelete(id, label) {
   document.getElementById('delete-info').innerHTML =
     `<strong>Registro a eliminar:</strong><br>${escapeHtml(label)}`;
   document.getElementById('delete-motivo').value = '';
-  document.getElementById('delete-password').value = '';
   document.getElementById('delete-error').classList.add('hidden');
   document.getElementById('modal-delete').classList.remove('hidden');
   setTimeout(() => document.getElementById('delete-motivo').focus(), 50);
@@ -713,12 +871,11 @@ function closeDeleteModal() {
 async function confirmDelete() {
   if (!deleteTarget) return;
 
-  const motivo   = document.getElementById('delete-motivo').value.trim();
-  const password = document.getElementById('delete-password').value;
-  const errEl    = document.getElementById('delete-error');
+  const motivo = document.getElementById('delete-motivo').value.trim();
+  const errEl  = document.getElementById('delete-error');
 
-  if (!motivo || !password) {
-    errEl.textContent = 'Completa el motivo y la clave de administrador.';
+  if (!motivo) {
+    errEl.textContent = 'Ingresa el motivo de eliminación.';
     errEl.classList.remove('hidden');
     return;
   }
@@ -730,7 +887,7 @@ async function confirmDelete() {
   try {
     await api(`/api/consultar/items/${deleteTarget.id}`, {
       method: 'DELETE',
-      body: JSON.stringify({ motivo, password }),
+      body: JSON.stringify({ motivo }),
     });
     closeDeleteModal();
     toast('Registro eliminado', 'success');
@@ -794,7 +951,7 @@ async function confirmPassword() {
 /* ── FORM MODAL ────────────────────────────────────────────── */
 async function openFormModal(id) {
   const title = document.getElementById('modal-form-title');
-  const fields = ['cod-molde','vehiculo','lote','pieza','version','repeticion','ubicacion','usos','puesto','tipo'];
+  const fields = ['cod-molde','vehiculo','lote','pieza','version','repeticion','ubicacion','puesto','tipo'];
 
   if (id) {
     title.textContent = 'Editar Registro';
@@ -808,7 +965,6 @@ async function openFormModal(id) {
       document.getElementById('form-version').value    = item.Version   ?? '';
       document.getElementById('form-repeticion').value = item.Repeticion ?? '';
       document.getElementById('form-ubicacion').value  = item.Ubicacion ?? '';
-      document.getElementById('form-usos').value       = item.Usos      ?? '0';
       document.getElementById('form-puesto').value     = item.Puesto    ?? '';
       document.getElementById('form-tipo').value       = item.Tipo      ?? 'M';
     } catch (e) {
@@ -820,14 +976,12 @@ async function openFormModal(id) {
     document.getElementById('form-id').value = '';
     fields.forEach(f => {
       const el = document.getElementById(`form-${f}`);
-      if (el.tagName === 'SELECT') {
-        el.selectedIndex = 0;
-      } else {
-        el.value = f === 'usos' ? '0' : '';
-      }
+      if (el.tagName === 'SELECT') el.selectedIndex = 0;
+      else el.value = '';
     });
   }
 
+  document.getElementById('btn-save-form').disabled = true;
   document.getElementById('modal-form').classList.remove('hidden');
   checkImgStatus();
 }
@@ -854,7 +1008,6 @@ async function saveForm() {
     version:     document.getElementById('form-version').value.trim(),
     repeticion:  document.getElementById('form-repeticion').value.trim(),
     ubicacion:   document.getElementById('form-ubicacion').value,
-    usos:        document.getElementById('form-usos').value || '0',
     puesto:      document.getElementById('form-puesto').value.trim(),
   };
 

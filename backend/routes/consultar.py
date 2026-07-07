@@ -1,12 +1,10 @@
-import time
 from functools import wraps
 from flask import Blueprint, request, jsonify, session
-from backend.models.inventario import get_all, get_by_id, create, update, soft_delete, UBICACIONES, TIPOS, PAGE_SIZE
+from backend.models.inventario import get_all, get_by_id, create, update, soft_delete, PAGE_SIZE
+from backend.models.opciones import get_by_grupo
 from backend.models.auth import verify_admin_password
 
 bp = Blueprint('consultar', __name__, url_prefix='/api/consultar')
-
-_ADMIN_VERIFIED_TTL = 600  # segundos (10 minutos)
 
 
 def _fmt_row(r):
@@ -25,12 +23,6 @@ def _require_any_session(f):
         return f(*args, **kwargs)
     return decorated
 
-
-def _admin_verified_recently():
-    """True si admin_verified fue otorgado en los ultimos 10 minutos."""
-    if not session.get('admin_verified'):
-        return False
-    return (time.time() - session.get('admin_verified_at', 0)) < _ADMIN_VERIFIED_TTL
 
 
 @bp.route('/items', methods=['GET'])
@@ -70,7 +62,6 @@ def verify_password():
     username = verify_admin_password(password)
     if username:
         session['admin_verified'] = True
-        session['admin_verified_at'] = time.time()
         session['admin_user'] = username
         return jsonify({'ok': True, 'user': username})
     return jsonify({'ok': False, 'error': 'Clave incorrecta'}), 401
@@ -78,8 +69,6 @@ def verify_password():
 
 @bp.route('/items', methods=['POST'])
 def create_item():
-    if not _admin_verified_recently():
-        return jsonify({'error': 'Sesion de administrador expirada. Vuelva a ingresar la clave.'}), 403
     data = request.get_json(silent=True) or {}
     usuario = session.get('admin_user', 'admin')
     create(data, usuario)
@@ -88,8 +77,6 @@ def create_item():
 
 @bp.route('/items/<int:id_registro>', methods=['PUT'])
 def update_item(id_registro):
-    if not _admin_verified_recently():
-        return jsonify({'error': 'Sesion de administrador expirada. Vuelva a ingresar la clave.'}), 403
     data = request.get_json(silent=True) or {}
     usuario = session.get('admin_user', 'admin')
     update(id_registro, data, usuario)
@@ -98,22 +85,19 @@ def update_item(id_registro):
 
 @bp.route('/items/<int:id_registro>', methods=['DELETE'])
 def delete_item(id_registro):
-    body    = request.get_json(silent=True) or {}
-    password = body.get('password', '')
-    motivo   = body.get('motivo', '').strip()
+    body   = request.get_json(silent=True) or {}
+    motivo = body.get('motivo', '').strip()
 
     if not motivo:
         return jsonify({'error': 'El motivo de eliminación es requerido'}), 400
 
-    # Re-verifica la clave admin en cada eliminación (no depender de sesión)
-    username = verify_admin_password(password)
-    if not username:
-        return jsonify({'error': 'Clave incorrecta'}), 401
-
-    soft_delete(id_registro, motivo, username)
+    usuario = session.get('admin_user', 'admin')
+    soft_delete(id_registro, motivo, usuario)
     return jsonify({'ok': True})
 
 
 @bp.route('/opciones', methods=['GET'])
 def opciones():
-    return jsonify({'ubicaciones': UBICACIONES, 'tipos': TIPOS})
+    tipos     = [o['valor'] for o in get_by_grupo('tipo_inv')]
+    ubicaciones = [o['valor'] for o in get_by_grupo('ubicacion_inv')]
+    return jsonify({'ubicaciones': ubicaciones, 'tipos': tipos})
