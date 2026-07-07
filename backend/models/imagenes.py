@@ -56,6 +56,8 @@ def find_for_tool(tipo, cod, version, pieza):
     """
     Busca la imagen más específica en una sola query usando CASE para prioridad.
     Wildcards: XXXX (cod), XXX (version/pieza).
+    Si version/pieza son vacíos y no hay coincidencia exacta/wildcard,
+    hace fallback LIKE para encontrar cualquier imagen del mismo tipo+cod.
     """
     version = _pad3(version)
     pieza   = _pad3(pieza)
@@ -78,9 +80,18 @@ def find_for_tool(tipo, cod, version, pieza):
         f"SELECT TOP 1 * FROM dbo.[{TABLE}] "
         f"WHERE Nombre_Imagen IN ({placeholders}) "
         f"ORDER BY CASE {case_when} ELSE 0 END DESC",
-        candidates + candidates  # primera lista para IN, segunda para CASE
+        candidates + candidates
     )
     return rows[0] if rows else None
+
+
+def find_candidates(tipo, cod):
+    """Retorna todas las imágenes que coinciden con tipo+cod (cualquier versión/pieza)."""
+    rows = query(
+        f"SELECT * FROM dbo.[{TABLE}] WHERE Nombre_Imagen LIKE ? ORDER BY Nombre_Imagen",
+        [f"{tipo}|{cod}|%"]
+    )
+    return rows
 
 
 def create(nombre, cantidad_puntos, puntos_esp_pista, id_storage):

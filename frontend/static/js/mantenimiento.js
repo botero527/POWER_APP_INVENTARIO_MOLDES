@@ -1,4 +1,10 @@
-﻿/* ── STATE ─────────────────────────────────────────────── */
+﻿function padField(val, digits) {
+  if (!val) return val;
+  const s = String(val).trim();
+  return /^\d+$/.test(s) ? s.padStart(digits, '0') : s;
+}
+
+/* ── STATE ─────────────────────────────────────────────── */
 let currentUser = null;
 let currentRol  = null;
 
@@ -160,9 +166,9 @@ function bindBuscarHer() {
 
 async function buscarHeramentales() {
   const tipo       = document.getElementById('buscar-tipo').value;
-  const cod        = document.getElementById('buscar-cod').value.trim();
+  const cod        = padField(document.getElementById('buscar-cod').value.trim(), 4);
   const version    = document.getElementById('buscar-version').value.trim();
-  const pieza      = document.getElementById('buscar-pieza').value.trim();
+  const pieza      = padField(document.getElementById('buscar-pieza').value.trim(), 3);
   const repeticion = document.getElementById('buscar-repeticion').value.trim();
 
   if (!tipo && !cod && !version && !pieza && !repeticion) {

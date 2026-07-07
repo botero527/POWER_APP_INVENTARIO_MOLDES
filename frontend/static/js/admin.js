@@ -1,3 +1,12 @@
+/* ── UTILIDADES ────────────────────────────────────────────── */
+function padField(val, digits) {
+  if (!val) return val;
+  const s = String(val).trim();
+  return /^\d+$/.test(s) ? s.padStart(digits, '0') : s;
+}
+const padCod   = v => padField(v, 4);
+const padPieza = v => padField(v, 3);
+
 /* ── STATE ─────────────────────────────────────────────────── */
 let editTarget    = null;
 let pendingAction = null;
@@ -471,6 +480,11 @@ async function loadOpciones() {
     formTipo.insertAdjacentHTML('beforeend', `<option value="${t}">${t}</option>`);
   });
 
+  const imgTipo = document.getElementById('img-tipo');
+  data.tipos.forEach(t => {
+    imgTipo.insertAdjacentHTML('beforeend', `<option value="${t}">${t}</option>`);
+  });
+
   const formUbic = document.getElementById('form-ubicacion');
   data.ubicaciones.forEach(u => {
     formUbic.insertAdjacentHTML('beforeend', `<option value="${u}">${u}</option>`);
@@ -481,9 +495,9 @@ async function loadOpciones() {
 function getActiveFilters() {
   return {
     tipo:      document.getElementById('f-tipo').value,
-    cod_molde: document.getElementById('f-cod-molde').value.trim(),
+    cod_molde: padCod(document.getElementById('f-cod-molde').value.trim()),
     version:   document.getElementById('f-version').value.trim(),
-    pieza:     document.getElementById('f-pieza').value.trim(),
+    pieza:     padPieza(document.getElementById('f-pieza').value.trim()),
   };
 }
 
@@ -636,12 +650,13 @@ async function checkImgStatus() {
   if (pieza)   params.set('pieza', pieza);
 
   try {
-    const img = await fetch(`/api/mantenimiento/imagenes/buscar?${params}`)
+    const resp = await fetch(`/api/mantenimiento/imagenes/buscar?${params}`)
       .then(r => r.ok ? r.json() : null).catch(() => null);
 
     bar.classList.remove('hidden', 'found', 'missing');
     const saveBtn = document.getElementById('btn-save-form');
-    if (img) {
+    const img = resp;
+    if (img && img.Nombre_Imagen) {
       bar.classList.add('found');
       bar.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span>Imagen encontrada: <strong>${escapeHtml(img.Nombre_Imagen)}</strong></span>`;
@@ -683,6 +698,8 @@ function parsePaste(raw) {
     IMPORT_COLS.forEach((col, i) => { obj[col] = cells[i] ?? ''; });
     obj.tipo      = obj.tipo.toUpperCase().trim();
     obj.ubicacion = obj.ubicacion.toUpperCase().trim();
+    obj.cod_molde = padCod(obj.cod_molde);
+    obj.pieza     = padPieza(obj.pieza);
     return obj;
   });
 }
@@ -833,12 +850,17 @@ function bindButtons() {
   document.getElementById('btn-cancel-form').addEventListener('click', closeFormModal);
   document.getElementById('btn-save-form').addEventListener('click', saveForm);
 
-  // Validación de imagen al llenar los campos clave
+  // Normalización y validación de imagen al llenar los campos clave
   let imgCheckTimer;
   ['form-tipo', 'form-cod-molde', 'form-version', 'form-pieza'].forEach(id => {
     const el = document.getElementById(id);
     el.addEventListener('input',  () => { clearTimeout(imgCheckTimer); imgCheckTimer = setTimeout(checkImgStatus, 600); });
     el.addEventListener('change', () => { clearTimeout(imgCheckTimer); imgCheckTimer = setTimeout(checkImgStatus, 300); });
+    el.addEventListener('blur',   () => {
+      if (id === 'form-cod-molde') el.value = padCod(el.value.trim());
+      if (id === 'form-pieza')     el.value = padPieza(el.value.trim());
+      clearTimeout(imgCheckTimer); imgCheckTimer = setTimeout(checkImgStatus, 200);
+    });
   });
 
   // Delete modal
@@ -993,7 +1015,7 @@ function closeFormModal() {
 }
 
 async function saveForm() {
-  const codMolde = document.getElementById('form-cod-molde').value.trim();
+  const codMolde = padCod(document.getElementById('form-cod-molde').value.trim());
   if (!codMolde) {
     toast('CodMolde es requerido', 'error');
     return;
@@ -1004,7 +1026,7 @@ async function saveForm() {
     cod_molde:   codMolde,
     vehiculo:    document.getElementById('form-vehiculo').value.trim(),
     lote:        document.getElementById('form-lote').value.trim(),
-    pieza:       document.getElementById('form-pieza').value.trim(),
+    pieza:       padPieza(document.getElementById('form-pieza').value.trim()),
     version:     document.getElementById('form-version').value.trim(),
     repeticion:  document.getElementById('form-repeticion').value.trim(),
     ubicacion:   document.getElementById('form-ubicacion').value,

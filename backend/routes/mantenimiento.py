@@ -3,7 +3,7 @@ import uuid
 from functools import wraps
 from flask import Blueprint, request, jsonify, session, current_app
 from werkzeug.utils import secure_filename
-from backend.models.imagenes import get_all, get_by_id, find_for_tool, create, update, delete, build_nombre
+from backend.models.imagenes import get_all, get_by_id, find_for_tool, find_candidates, create, update, delete, build_nombre
 from backend.models.usuarios import get_usernames, verify_login
 from backend.limiter import limiter
 
@@ -92,6 +92,7 @@ def buscar_imagen():
     cod     = request.args.get('cod', '')
     version = request.args.get('version', '')
     pieza   = request.args.get('pieza', '')
+
     row = find_for_tool(tipo, cod, version, pieza)
     if not row:
         return jsonify(None), 404
@@ -132,7 +133,12 @@ def create_imagen():
     except ValueError as e:
         return jsonify({'error': str(e)}), 500
 
-    create(nombre, cantidad_puntos, puntos_esp, id_storage or '')
+    try:
+        create(nombre, cantidad_puntos, puntos_esp, id_storage or '')
+    except Exception as e:
+        if '23000' in str(e) or 'duplicate key' in str(e).lower():
+            return jsonify({'error': f'Ya existe una imagen con el nombre "{nombre}". Edita la existente en lugar de crear una nueva.'}), 409
+        raise
     return jsonify({'ok': True}), 201
 
 

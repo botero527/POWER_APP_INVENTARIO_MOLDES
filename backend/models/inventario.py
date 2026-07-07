@@ -1,8 +1,17 @@
+import re
 from backend.db import query, execute
 
 TABLE = 'AppControlInventarios_RegistroInventario'
 
 PAGE_SIZE = 100
+
+
+def _pad(val, digits):
+    """Zero-pad val a `digits` dígitos solo si es puramente numérico."""
+    if not val:
+        return val
+    s = str(val).strip()
+    return s.zfill(digits) if re.fullmatch(r'\d+', s) else s
 
 
 def get_all(filters=None, offset=0, limit=None):
@@ -16,16 +25,31 @@ def get_all(filters=None, offset=0, limit=None):
             params.append(filters['tipo'])
             has_filters = True
         if filters.get('cod_molde'):
-            conditions.append('CodMolde LIKE ?')
-            params.append(f"%{filters['cod_molde']}%")
+            v = _pad(filters['cod_molde'], 4)
+            if re.fullmatch(r'\d+', v):
+                # Valor numérico: coincide exacto O equivalente numérico (cubre histórico sin padding)
+                conditions.append(
+                    '(CodMolde = ? OR (ISNUMERIC(CodMolde) = 1 AND CAST(CodMolde AS INT) = CAST(? AS INT)))'
+                )
+                params.extend([v, v])
+            else:
+                conditions.append('CodMolde LIKE ?')
+                params.append(f"%{v}%")
             has_filters = True
         if filters.get('version'):
             conditions.append('Version LIKE ?')
             params.append(f"%{filters['version']}%")
             has_filters = True
         if filters.get('pieza'):
-            conditions.append('Pieza LIKE ?')
-            params.append(f"%{filters['pieza']}%")
+            v = _pad(filters['pieza'], 3)
+            if re.fullmatch(r'\d+', v):
+                conditions.append(
+                    '(Pieza = ? OR (ISNUMERIC(Pieza) = 1 AND CAST(Pieza AS INT) = CAST(? AS INT)))'
+                )
+                params.extend([v, v])
+            else:
+                conditions.append('Pieza LIKE ?')
+                params.append(f"%{v}%")
             has_filters = True
         if filters.get('repeticion'):
             conditions.append('Repeticion = ?')
@@ -64,8 +88,8 @@ def create(data, usuario):
         VALUES (?,?,?,?,?,?,?,?,0,?,GETDATE(),?,GETDATE(),?)
     """
     params = [
-        data.get('tipo'), data.get('cod_molde'), data.get('vehiculo'),
-        data.get('pieza'), data.get('lote'), data.get('version'),
+        data.get('tipo'), _pad(data.get('cod_molde'), 4), data.get('vehiculo'),
+        _pad(data.get('pieza'), 3), data.get('lote'), data.get('version'),
         data.get('repeticion'), data.get('ubicacion'),
         data.get('puesto'), usuario, usuario,
     ]
@@ -81,8 +105,8 @@ def update(id_registro, data, usuario):
         WHERE IdRegistro=?
     """
     params = [
-        data.get('tipo'), data.get('cod_molde'), data.get('vehiculo'),
-        data.get('pieza'), data.get('lote'), data.get('version'),
+        data.get('tipo'), _pad(data.get('cod_molde'), 4), data.get('vehiculo'),
+        _pad(data.get('pieza'), 3), data.get('lote'), data.get('version'),
         data.get('repeticion'), data.get('ubicacion'),
         data.get('puesto'), usuario, id_registro,
     ]
