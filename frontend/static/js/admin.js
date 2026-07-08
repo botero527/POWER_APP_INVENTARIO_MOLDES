@@ -511,6 +511,19 @@ async function loadOpciones() {
   }
 }
 
+async function _refreshTiposExistentes() {
+  try {
+    const tipos = await api('/api/consultar/tipos-existentes');
+    const fTipo = document.getElementById('f-tipo');
+    if (!fTipo) return;
+    const selected = fTipo.value;
+    fTipo.innerHTML = '<option value="">Todos</option>';
+    tipos.forEach(t => fTipo.insertAdjacentHTML('beforeend', `<option value="${t}">${t}</option>`));
+    // Mantener la selección actual si sigue siendo válida
+    if (selected && tipos.includes(selected)) fTipo.value = selected;
+  } catch { /* silencioso — no interrumpir el flujo principal */ }
+}
+
 /* ── TABLA ─────────────────────────────────────────────────── */
 function getActiveFilters() {
   return {
@@ -938,6 +951,7 @@ async function confirmImport() {
     }
     closeImportModal();
     loadTable();
+    if (ok) _refreshTiposExistentes();
     toast(`${ok} registro${ok > 1 ? 's' : ''} importado${ok > 1 ? 's' : ''}${fail ? ` · ${fail} fallaron` : ''}`, ok ? 'success' : 'error');
   } finally {
     btn.disabled = false;
@@ -1042,6 +1056,7 @@ async function confirmDelete() {
     closeDeleteModal();
     toast('Registro eliminado', 'success');
     loadTable();
+    _refreshTiposExistentes();
   } catch (e) {
     errEl.textContent = e.message || 'Error. Verifica la clave y completa el motivo.';
     errEl.classList.remove('hidden');
@@ -1184,6 +1199,7 @@ async function saveForm() {
     }
     closeFormModal();
     loadTable();
+    _refreshTiposExistentes();
   } catch (e) {
     toast(e.message, 'error');
   } finally {

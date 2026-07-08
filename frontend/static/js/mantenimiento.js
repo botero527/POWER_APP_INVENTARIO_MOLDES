@@ -444,6 +444,7 @@ function prevStep() {
     renderStepBar();
     showStepContent(currentStep);
     if (currentStep === 2) loadStep2();
+    if (currentStep === 1) loadStep1();
   }
 }
 
@@ -1178,15 +1179,12 @@ function _hideOfflineBanner() {
 }
 
 function _bindOfflineEvents() {
-  const onOffline = () => _showOfflineBanner('Sin conexión — los datos se guardarán cuando vuelva el internet.');
-  const onOnline  = async () => {
-    const retryEl = document.getElementById('offline-banner-retry');
-    if (retryEl) retryEl.textContent = 'Conexión restaurada — guardando...';
-    // Reintentar guardar todo lo pendiente
-    if (manttoActivoId && currentStep === 1) {
-      const ok = await saveAllStep1();
-      if (ok) { _hideOfflineBanner(); toast('Conexión restaurada — datos guardados', 'success'); }
-      else { _showOfflineBanner('Conexión inestable — algunos datos aún no se guardaron.'); }
+  const onOffline = () => _showOfflineBanner('Sin conexión a internet — conéctate para poder guardar los datos.');
+  const onOnline  = () => {
+    if (_offlinePending) {
+      _showOfflineBanner('Conexión restaurada — presiona Siguiente o el botón ✓ para guardar los datos pendientes.');
+      const retryEl = document.getElementById('offline-banner-retry');
+      if (retryEl) retryEl.textContent = '';
     } else {
       _hideOfflineBanner();
     }
@@ -1258,6 +1256,7 @@ async function saveAllStep1() {
       items.filter(i => i.clase === clase).forEach(i => setFieldSaved(prefix, i.id_med, null));
     });
     if (label) { label.textContent = '✓ Todo guardado'; setTimeout(() => { if (label) label.textContent = ''; }, 2500); }
+    _hideOfflineBanner();
     return true;
   } catch {
     toast('Error al guardar. Intenta de nuevo.', 'error');
