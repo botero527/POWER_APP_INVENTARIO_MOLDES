@@ -27,12 +27,16 @@ async function api(url, opts = {}) {
     clearTimeout(timeoutId);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      // 503 = servidor sin conexión a BD
+      if (res.status === 503) throw new Error('Sin conexión a la base de datos. Verifica tu red e intenta de nuevo.');
       throw new Error(err.error || `Error ${res.status}`);
     }
     return res.json();
   } catch (e) {
     clearTimeout(timeoutId);
-    if (e.name === 'AbortError') throw new Error('Tiempo de espera agotado (15s)');
+    if (e.name === 'AbortError') throw new Error('Sin respuesta del servidor (15s). Verifica tu conexión de red.');
+    // TypeError: Failed to fetch = sin red o servidor caído
+    if (e instanceof TypeError && e.message.includes('fetch')) throw new Error('Sin conexión. Verifica tu red e intenta de nuevo.');
     throw e;
   }
 }

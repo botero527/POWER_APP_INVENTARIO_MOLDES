@@ -74,6 +74,14 @@ def get_all(search=None, estatus=None, offset=0, limit=None):
     return _fmt(rows, ['FechaCreateMant', 'FechaReleaseMant']), total, has_filters
 
 
+def get_head(id_mant):
+    """Solo cabecera — sin detalles. Usar para verificaciones de permisos."""
+    rows = query(f"SELECT * FROM dbo.[{HEAD}] WHERE IdManten = ?", [id_mant])
+    if not rows:
+        return None
+    return _normalize_row(rows[0])
+
+
 def get_by_id(id_mant):
     rows = query(f"SELECT * FROM dbo.[{HEAD}] WHERE IdManten = ?", [id_mant])
     if not rows:

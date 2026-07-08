@@ -4,17 +4,35 @@ from backend.config import CONNECTION_STRING
 # pyodbc pooling a nivel de driver ODBC (por defecto activo, lo hacemos explícito)
 pyodbc.pooling = True
 
+# Códigos ODBC que indican fallo de red / servidor inalcanzable
+_NETWORK_STATES = {'08S01', '08001', '08003', '08007', 'HYT00', 'IM002'}
+
+
+class DBConnectionError(Exception):
+    """Se lanza cuando no se puede conectar a la BD (sin red, BD caída)."""
+
+
+def _is_network_error(exc):
+    code = exc.args[0] if exc.args else ''
+    return str(code) in _NETWORK_STATES
+
 
 def get_connection():
     """Retorna la conexión del request actual (Flask g) o una nueva fuera de contexto."""
     try:
         from flask import g
         if 'db_conn' not in g:
-            g.db_conn = pyodbc.connect(CONNECTION_STRING, timeout=15)
+            try:
+                g.db_conn = pyodbc.connect(CONNECTION_STRING, timeout=15)
+            except pyodbc.Error as e:
+                raise DBConnectionError() from e
         return g.db_conn
     except RuntimeError:
         # Fuera de contexto Flask (scripts, tests)
-        return pyodbc.connect(CONNECTION_STRING, timeout=15)
+        try:
+            return pyodbc.connect(CONNECTION_STRING, timeout=15)
+        except pyodbc.Error as e:
+            raise DBConnectionError() from e
 
 
 def close_request_connection(error=None):

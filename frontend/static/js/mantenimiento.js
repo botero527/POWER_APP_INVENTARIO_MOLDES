@@ -290,6 +290,8 @@ async function abrirFormMantto() {
     `${herSeleccionado.Tipo}${herSeleccionado.CodMolde} — Rep. ${herSeleccionado._nextRep}`;
   document.getElementById('modal-form-mantto').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
+  _bindOfflineEvents();
+  if (!navigator.onLine) _showOfflineBanner('Sin conexión — los datos se guardarán cuando vuelva el internet.');
   // Pre-cargar opciones dinamicas en paralelo con step1
   loadOpcionesDynamic();
   await loadStep1();
@@ -305,6 +307,7 @@ function closeFormMantto() {
   }
   document.getElementById('modal-form-mantto').classList.add('hidden');
   document.body.style.overflow = '';
+  _unbindOfflineEvents();
   manttoActivoId = null; imgConfig = null; herSeleccionado = null;
   recibeUsername = null; window._step2Data = null;
   currentStep = 1;
@@ -354,6 +357,7 @@ async function resumeMantto(id) {
       `${m.Tipo}${m.CodHer} — Rep. ${m.Repeticion} (Continuando)`;
     document.getElementById('modal-form-mantto').classList.remove('hidden');
     document.body.style.overflow = 'hidden';
+    _bindOfflineEvents();
 
     // Cargar datos del paso correspondiente
     if (startStep === 1) {
@@ -418,11 +422,13 @@ async function nextStep() {
       empty[0].focus();
       return;
     }
-    const saved = await saveAllStep1();
-    if (!saved) return;
+    // Transición inmediata — guarda en background sin bloquear la UI
     currentStep = 2;
     renderStepBar(); showStepContent(2);
     loadStep2();
+    saveAllStep1().catch(() => {
+      _showOfflineBanner('Sin conexión — los datos del paso anterior no se guardaron aún. Se guardarán automáticamente cuando vuelva el internet.');
+    });
   } else if (currentStep === 2) {
     const ok = await saveStep2();
     if (!ok) return;
@@ -533,11 +539,22 @@ async function loadStep3() {
   // Quien entrega = usuario de sesión (se guarda ahora)
   const entregaName = (document.getElementById('mant-username-label')?.textContent || '').trim();
   document.getElementById('step3-entrega-name').textContent = entregaName;
-  if (entregaName) {
-    await api(`/api/mantenimiento/manttos/${manttoActivoId}`, {
-      method: 'PUT', body: JSON.stringify({ Entrega: entregaName }),
-    }).catch(() => {});
-  }
+  // Guardar Entrega + precargar lista de usuarios "Recibe" en paralelo — no bloquea UI
+  const saveEntregaP = entregaName
+    ? api(`/api/mantenimiento/manttos/${manttoActivoId}`, {
+        method: 'PUT', body: JSON.stringify({ Entrega: entregaName }),
+      }).catch(() => {})
+    : Promise.resolve();
+  const preloadUsersP = (async () => {
+    const sel = document.getElementById('recibe-user-select');
+    if (sel && sel.options.length <= 1) {
+      try {
+        const users = await api('/api/mantenimiento/usuarios');
+        users.forEach(u => sel.insertAdjacentHTML('beforeend',
+          `<option value="${u.UserName}">${u.UserName}</option>`));
+      } catch { /* silencioso */ }
+    }
+  })();
 
   // Cargar detalle completo en panel derecho
   const panel = document.getElementById('step3-detail-panel');
@@ -749,6 +766,10 @@ function loadStep4() {
 }
 
 async function finalizarMantto() {
+  if (_offlinePending) {
+    toast('Sin conexión — espera a que los datos se guarden antes de finalizar.', 'error');
+    return;
+  }
   const btn = document.getElementById('btn-ok-confirm-finalizar');
   if (btn) btn.disabled = true;
   try {
@@ -756,6 +777,7 @@ async function finalizarMantto() {
       method: 'PUT',
       body: JSON.stringify({ Estatus: 'Finalizado' }),
     });
+    _lsClearAll(manttoActivoId);
     closeConfirmarFinalizar();
     closeFormMantto();
     toast('¡Mantenimiento finalizado correctamente!', 'success');
@@ -940,8 +962,27 @@ async function loadExistingDetails() {
     const byClase = mantto.details_by_clase || {};
     const ajuste  = byClase['MedidaTolerancia_Mantenimiento'] || [];
     const espesor = byClase['EspesorPista_Mantenimiento'] || [];
-    ajuste.forEach(d  => setFieldSaved('ajuste',  d.IdMed, d.Value));
-    espesor.forEach(d => setFieldSaved('espesor', d.IdMed, d.Value));
+
+    const savedIds = { ajuste: new Set(), espesor: new Set() };
+    ajuste.forEach(d  => { setFieldSaved('ajuste',  d.IdMed, d.Value); savedIds.ajuste.add(d.IdMed); });
+    espesor.forEach(d => { setFieldSaved('espesor', d.IdMed, d.Value); savedIds.espesor.add(d.IdMed); });
+
+    // Restaurar del localStorage los campos que el servidor devolvió vacíos (pérdida de conexión)
+    for (const prefix of ['ajuste', 'espesor']) {
+      document.querySelectorAll(`[id^="inp-${prefix}-"]`).forEach(inp => {
+        const idMed = parseInt(inp.id.replace(`inp-${prefix}-`, ''), 10);
+        if (savedIds[prefix].has(idMed)) return; // ya cargado del servidor
+        const draft = _lsGet(prefix, idMed);
+        if (draft) {
+          inp.value = draft;
+          // marcar visualmente como pendiente de guardar (active-row, no saved-row)
+          const row = document.getElementById(`row-${prefix}-${idMed}`);
+          const dot = document.getElementById(`dot-${prefix}-${idMed}`);
+          if (row) row.classList.add('active-row');
+          if (dot) dot.classList.add('active');
+        }
+      });
+    }
   } catch { /* sin datos existentes */ }
 }
 
@@ -984,6 +1025,8 @@ function onMeasureChange(prefix, idMed) {
     btn.querySelector('.icon-pencil').style.display = 'none';
     btn.title = 'Guardar';
   }
+  // Guardar en localStorage como buffer offline
+  if (inp.value.trim()) _lsSave(prefix, idMed, inp.value.trim());
 }
 
 // Auto-guarda al perder el foco si el campo tiene valor y no está ya guardado
@@ -1014,6 +1057,8 @@ function setFieldSaved(prefix, idMed, value) {
   const btn = document.getElementById(`btn-${prefix}-${idMed}`);
   if (!inp) return;
   if (value !== null && value !== undefined) inp.value = value;
+  // Ya está en el servidor — borrar el borrador local
+  try { localStorage.removeItem(_lsKey(prefix, idMed)); } catch { /* ignorar */ }
   inp.classList.add('saved');
   inp.readOnly = true;
   if (row) { row.classList.remove('active-row'); row.classList.add('saved-row'); }
@@ -1102,6 +1147,81 @@ async function saveStep1Batch(clase) {
     toast('Error al guardar. Intenta de nuevo.', 'error');
     return false;
   }
+}
+
+/* ── Detección de conexión — banner persistente en el wizard ─────────────
+   Muestra un banner naranja dentro del modal cuando hay fallo de red.
+   No desaparece solo — se oculta cuando la conexión vuelve y los datos
+   se reintentaron guardar con éxito.
+──────────────────────────────────────────────────────────────────────────── */
+let _offlinePending = false;   // hay datos sin guardar por falta de red
+let _offlineHandlers = null;   // refs a los listeners para removerlos al cerrar
+
+function _showOfflineBanner(msg) {
+  _offlinePending = true;
+  const banner  = document.getElementById('offline-banner');
+  const msgEl   = document.getElementById('offline-banner-msg');
+  const retryEl = document.getElementById('offline-banner-retry');
+  if (!banner) return;
+  if (msg) msgEl.textContent = msg;
+  retryEl.textContent = 'Reintentando cuando vuelva la conexión...';
+  banner.classList.remove('hidden');
+  banner.style.display = 'flex';
+}
+
+function _hideOfflineBanner() {
+  _offlinePending = false;
+  const banner = document.getElementById('offline-banner');
+  if (!banner) return;
+  banner.classList.add('hidden');
+  banner.style.display = '';
+}
+
+function _bindOfflineEvents() {
+  const onOffline = () => _showOfflineBanner('Sin conexión — los datos se guardarán cuando vuelva el internet.');
+  const onOnline  = async () => {
+    const retryEl = document.getElementById('offline-banner-retry');
+    if (retryEl) retryEl.textContent = 'Conexión restaurada — guardando...';
+    // Reintentar guardar todo lo pendiente
+    if (manttoActivoId && currentStep === 1) {
+      const ok = await saveAllStep1();
+      if (ok) { _hideOfflineBanner(); toast('Conexión restaurada — datos guardados', 'success'); }
+      else { _showOfflineBanner('Conexión inestable — algunos datos aún no se guardaron.'); }
+    } else {
+      _hideOfflineBanner();
+    }
+  };
+  window.addEventListener('offline', onOffline);
+  window.addEventListener('online',  onOnline);
+  _offlineHandlers = { onOffline, onOnline };
+}
+
+function _unbindOfflineEvents() {
+  if (!_offlineHandlers) return;
+  window.removeEventListener('offline', _offlineHandlers.onOffline);
+  window.removeEventListener('online',  _offlineHandlers.onOnline);
+  _offlineHandlers = null;
+  _hideOfflineBanner();
+}
+
+/* ── localStorage — buffer offline para mediciones paso 1 ────────────────
+   Clave: mantto_draft_{idMant}_{prefix}_{idMed}
+   Se guarda al escribir, se restaura al abrir, se limpia al finalizar/cancelar.
+──────────────────────────────────────────────────────────────────────────── */
+function _lsKey(prefix, idMed) {
+  return `mantto_draft_${manttoActivoId}_${prefix}_${idMed}`;
+}
+function _lsSave(prefix, idMed, val) {
+  try { localStorage.setItem(_lsKey(prefix, idMed), val); } catch { /* cuota llena, ignorar */ }
+}
+function _lsGet(prefix, idMed) {
+  try { return localStorage.getItem(_lsKey(prefix, idMed)); } catch { return null; }
+}
+function _lsClearAll(idMant) {
+  try {
+    const prefix = `mantto_draft_${idMant}_`;
+    Object.keys(localStorage).filter(k => k.startsWith(prefix)).forEach(k => localStorage.removeItem(k));
+  } catch { /* ignorar */ }
 }
 
 // Guarda AMBAS clases en una sola llamada — llamado desde Siguiente paso 1
@@ -1343,6 +1463,7 @@ async function confirmCancelMantto() {
       method: 'DELETE',
       body: JSON.stringify({ motivo }),
     });
+    _lsClearAll(cancelManttoTarget);
     closeCancelMantto();
     toast('Mantenimiento cancelado', 'success');
     loadManttos();

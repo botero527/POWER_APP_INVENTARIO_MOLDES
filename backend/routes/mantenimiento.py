@@ -372,8 +372,8 @@ def create_mantto():
 @login_required
 def update_mantto(id_mant):
     body = request.get_json(silent=True) or {}
-    from backend.models.mantto import update_head, get_by_id
-    m = get_by_id(id_mant)
+    from backend.models.mantto import update_head, get_head
+    m = get_head(id_mant)
     if not m:
         return jsonify({'error': 'No encontrado'}), 404
     if m.get('Estatus') == 'Pendiente' and not is_admin():
@@ -406,7 +406,7 @@ def upsert_mantto_detail(id_mant):
 @bp.route('/manttos/<int:id_mant>/details/batch', methods=['PUT'])
 @login_required
 def upsert_mantto_details_batch(id_mant):
-    from backend.models.mantto import get_by_id as _get
+    from backend.models.mantto import get_head as _get
     m = _get(id_mant)
     if m and m.get('Estatus') == 'Pendiente' and not is_admin():
         if m.get('CreadoPor') != session.get('mant_username'):

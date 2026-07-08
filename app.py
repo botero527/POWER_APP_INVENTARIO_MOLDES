@@ -3,6 +3,7 @@ import logging
 from functools import wraps
 from flask import Flask, render_template, session, redirect, url_for, request, jsonify
 from werkzeug.exceptions import HTTPException
+from flask_compress import Compress
 from backend.config import SECRET_KEY, DEBUG
 from backend.routes.consultar import bp as consultar_bp
 from backend.routes.mantenimiento import bp as mantenimiento_bp
@@ -15,6 +16,9 @@ app = Flask(
     static_folder='frontend/static',
 )
 app.secret_key = SECRET_KEY
+app.config['COMPRESS_ALGORITHM'] = ['br', 'gzip']  # Brotli primero, gzip fallback
+app.config['COMPRESS_MIN_SIZE'] = 500               # comprimir respuestas > 500 bytes
+Compress(app)
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 # SECURE solo cuando haya HTTPS — mientras se corre en HTTP, debe ser False
@@ -38,7 +42,10 @@ def handle_http_error(e):
 
 @app.errorhandler(Exception)
 def handle_unexpected_error(e):
-    # Solo errores reales (500) merecen traceback completo
+    from backend.db import DBConnectionError
+    if isinstance(e, DBConnectionError):
+        app.logger.warning('Sin conexion a la BD: %s', str(e.__cause__))
+        return jsonify({'error': 'Sin conexión a la base de datos. Verifica tu red e intenta de nuevo.', 'db_down': True}), 503
     app.logger.exception('Error no manejado: %s', str(e))
     return jsonify({'error': 'Error interno del servidor. Intentalo nuevamente.'}), 500
 
